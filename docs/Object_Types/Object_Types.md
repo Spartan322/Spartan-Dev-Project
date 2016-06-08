@@ -12,6 +12,7 @@ Note: defaults are what the behavior acts like if the optional value was not ass
 * [Notification](Notification.md)
 * [Event](Event.md)
 * [Publisher](Publisher.md)
+* [Contract](Contract.md)
 * [Company](Company.md)
 * [Reviewer](Reviewer.md)
 * [Review Message](Review_Message.md)

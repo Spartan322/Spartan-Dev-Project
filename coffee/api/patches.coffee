@@ -15,6 +15,12 @@ SDP.GDT.addPublisher = (item) ->
 		ProjectContracts.moddedPublishers.push(item)
 	return
 
+SDP.GDT.addContract = (item) ->
+	item = item.toInput() if SDP.GDT.Contract? and item instanceof SDP.GDT.Contract
+	if Checks.checkPropertiesPresent(item, ['name', 'description', 'dF', 'tF'])
+		ProjectContracts.moddedContracts.push(item)
+	return
+
 SDP.GDT.addReviewer = (item) ->
 	if item.constructor is String then item = {id: item.replace(/\s/g,""), name: item}
 	item = item.toInput() if SDP.GDT.Reviewer? and item instanceof SDP.GDT.Reviewer
@@ -78,7 +84,7 @@ Also allows low chance for platform company to randomly give a publisher contrac
 ProjectContracts.createPublisher = (item, id) ->
 	if item.constructor is String then item = {name: item}
 	if id? then item.id = id
-	if not item.id? and item.name? then item.id = name.replace(/\s/g,"_").toUpperCase()
+	if not item.id? and item.name? then item.id = name.replace(/\s/g,"")
 	item
 ProjectContracts.vanillaPublishers = [
 	ProjectContracts.createPublisher("Active Visionaries")
@@ -217,6 +223,90 @@ SDP.GDT.Internal.generatePublisherContracts = (company, settings, maxNumber) ->
 
 ProjectContracts.publisherContracts.getContract = (company) ->
 	SDP.GDT.Internal.generatePublisherContracts(company, SDP.GDT.Internal.getGenericContractsSettings(company, "publisher"), 5).filter (c) -> not c.skip
+
+###
+Allows adding of standard contract work
+###
+ProjectContracts.moddedContracts = []
+ProjectContracts.getAvailableModContractsOf = (company, size) ->
+	contracts = []
+	for c in ProjectContracts.moddedContracts when not c.isAvailable? or (c.isAvailable? and c.isAvailable(company))
+		contracts.push(c) if c.size is size
+	contracts
+
+ProjectContracts.genericContracts.__oldGetContract = ProjectContracts.genericContracts.getContract
+ProjectContracts.genericContracts.getContract = (company) ->
+	settings = SDP.GDT.Internal.getGenericContractsSettings(company, "small")
+	seed = SDP.Util.getSeed(settings)
+	random = new MersenneTwister(seed)
+	genCon = SDP.GDT.Internal.generateContracts
+	resultContracts = []
+	contracts = ProjectContracts.genericContracts.__oldGetContract(company)
+	contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4)
+	if company.flags.mediumContractsEnabled
+		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "medium")
+		contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3))
+	if company.flags.largeContractsEnabled
+		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "large")
+		contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2))
+	return contracts.shuffle(random).filter (c) -> not c.skip
+
+SDP.GDT.Internal.generateContracts = (company, settings, sourceSet, size, maxNumber) ->
+	seed = SDP.Util.getSeed(settings)
+	random = new MersenneTwister(seed)
+	contracts = []
+	set = sourceSet.slice()
+	count = SDP.Util.getRandomInt(random, maxNumber)
+	count = Math.max(1, count) if settings.intialSettings
+	for i in [0...count] when set.length > 0
+		item = set.pickRandom(random)
+		set.remove(item)
+		contract = SDP.GDT.Internal.generateSpecificContract(company, item, size, random)
+		contract.id = "genericContracts"
+		contract.index = i
+		contract.skip = true if settings.contractsDone and settings.contractsDone.indexOf(i) isnt -1
+		contracts.push(contract)
+	contracts
+
+SDP.GDT.Internal.generateSpecificContract = (company, template, size, random) ->
+	r = random.random()
+	r += random.random() if(random.random() > 0.8
+	minPoints = 11
+	minPoints = 30 if size is "medium"
+	minPoints = 100 if size is "large"
+	minPoints += 6 if minPoints is 12 and company.staff.length > 2
+	factor = company.getCurrentDate().year / 25
+	minPoints += minPoints * factor
+	points = minPoints + minPoints * r
+	pointPart = points / (template.dF + template.tF)
+	d = pointPart * template.dF
+	t = pointPart * template.tF
+	d += d * 0.2 * random.random() * random.randomSign()
+	t += t * 0.2 * random.random() * random.randomSign()
+	d = Math.floor(d)
+	t = Math.floor(t)
+	pay = points * 1E3
+	pay /= 1E3
+	pay = Math.floor(pay) * 1E3
+	weeks = Math.floor(3 + 7 * random.random())
+	weeks = Math.floor(3 + 3 * random.random()) if size is "small"
+	penalty = pay * 0.2 + pay * 0.3 * random.random()
+	penalty /= 1E3
+	penalty = Math.floor(penalty) * 1E3
+	return {
+		name : template.name,
+		description : template.description
+		requiredD : d
+		requiredT : t
+		spawnedD : 0
+		spawnedT : 0
+		payment : pay
+		penalty : -penalty
+		weeksToFinish : weeks
+		rF : template.rF
+		isGeneric : true
+		size : size
+	}
 
 ###
 Allows adding reviewer names to the reviewer list along with existing and retire dates
