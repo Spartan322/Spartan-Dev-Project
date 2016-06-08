@@ -34,6 +34,16 @@ SDP.GDT.addReviewMessage = (item) ->
 		Reviews.moddedMessages.push(item)
 	return
 
+SDP.GDT.addApplicantFunctor = (item) ->
+	if Checks.checkPropertiesPresent(item, ['apply', 'forMale']) and typeof apply is "function"
+		JobApplicants.moddedAlgorithims.push(item)
+	return
+
+SDP.GDT.addFamousFunctor = (item) ->
+	if Checks.checkPropertiesPresent(item, ['apply', 'forMale']) and typeof apply is "function"
+		JobApplicants.moddedFamous.push(item)
+	return
+
 ###
 #
 # Patches: improves game modularbility and performance and kills bugs
@@ -460,3 +470,142 @@ class Game extends Game
 		if company.conferenceHype
 			@hypePoints = company.conferenceHype
 			company.conferenceHype = Math.floor(company.conferenceHype / 3)
+
+###
+Allow adding famous people and adding custom applicant algorithims
+###
+JobApplicants = {}
+JobApplicants.moddedFamous = []
+JobApplicants.moddedAlgorithims = []
+JobApplicants.getRandomMale = (random) ->
+	results = []
+	JobApplicants.moddedAlgorithims.forEach (val) ->
+		results.push(val.apply(random)) if val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getRandomFemale = (random) ->
+	results = []
+	JobApplicants.moddedAlgorithims.forEach (val) ->
+		results.push(val.apply(random)) if not val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getFamousMale = (tech, design, random) ->
+	results = []
+	JobApplicants.moddedFamous.forEach (val) ->
+		results.push(val.apply(random, tech, design)) if val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getFamousFemale = (tech, design, random) ->
+	results = []
+	JobApplicants.moddedFamous.forEach (val) ->
+		results.push(val.apply(random, tech, design)) if not val.forMale
+	results.pickRandom(random)
+
+JobApplicants.searchTests =
+	[
+		{
+			id : "ComplexAlgorithms"
+			name : "Complex Algorithms".localize()
+			minT : 0.6
+		}
+		{
+			id : "GameDemo"
+			name : "Game Demo".localize()
+			minD : 0.3,
+			minT : 0.3
+		}
+		{
+			id : "Showreel"
+			name : "Showreel".localize()
+			minD : 0.6
+		}
+	]
+UI.__olgGenerateJobApplicants = UI._generateJobApplicants
+UI._generateJobApplicants = ->
+	oldApplicants = UI.__olgGenerateJobApplicants()
+	settings = GameManager.uiSettings["findStaffData"]
+	settings = {ratio : 0.1, tests : []} if not settings
+	settings.seed = Math.floor(GameManager.company.getRandom() * 65535) if not settings.seed
+	ratio = settings.ratio
+	test = JobApplicants.searchTests.first (t) -> t.id is settings.tests.first()
+	company = GameManager.company
+	random = new MersenneTwister(settings.seed)
+	newApplicants = []
+	count = Math.floor(2 + 3 * (ratio + 0.2).clamp(0, 1))
+	rerolls = 0
+	maxRerolls = 2
+	maxBonus = if company.currentLevel is 4 then 4 / 5 else 2 / 5
+	takenNames = GameManager.company.staff.map (s) -> s.name
+	for i in [0...count]
+		qBonusFactor = ratio / 3 + (1 - ratio / 3) * random.random()
+		maxBonus += 1 / 5 if random.random() >= 0.95
+		q = 1 / 5 + maxBonus * qBonusFactor
+		level = Math.floor(q * 5).clamp(1,5)
+		maxD = 1
+		minD = 0
+		if test
+			maxD -= test.minT if test.minT
+			if test.minD
+				minD = test.minD
+				maxD -= minD
+		baseValue = 200 * level
+		d = baseValue * minD + baseValue * maxD * random.random()
+		t = baseValue - d
+		rBonusFactor = random.random()
+		r = 1 / 5 + maxBonus * rBonusFactor
+		sBonusFactor = random.random()
+		s = 1 / 5 + maxBonus * sBonusFactor
+		goodRoll = sBonusFactor > 0.5 && (qBonusFactor > 0.5 && rBonusFactor > 0.5)
+		if not goodRoll and (rerolls < maxRerolls and random.random() <= (ratio + 0.1).clamp(0, 0.7))
+			i--
+			rerolls++
+			continue
+		rerolls = 0
+		isFamous = false
+		sex = "male"
+		loop
+			sex = "male"
+			if goodRoll
+				name = JobApplicants.getFamousMale(t, d, random) if (random.random() > 0.15)
+				else
+					name = JobApplicants.getFamousFemale(t, d, random)
+					sex = "female"
+				isFamous = true
+			else
+				name = JobApplicants.getRandomMale(random) if random.random() > 0.25
+				else
+					name = JobApplicants.getRandomFemale(random)
+					sex = "female"
+				isFamous = false
+		break unless takenNames.indexOf(name) != -1
+		takenNames.push(name)
+		salary = Character.BASE_SALARY_PER_LEVEL * level
+		salary += salary * 0.2 * random.random() * random.randomSign()
+		salary = Math.floor(salary/1E3) * 1E3
+		newApplicants.push {
+			name : name,
+			qualityFactor : q,
+			technologyFactor : t / 500,
+			designFactor : d / 500,
+			researchFactor : r,
+			speedFactor : s,
+			salary : salary,
+			isFamous : isFamous,
+			sex : sex
+		}
+	GDT.fire GameManager, GDT.eventKeys.gameplay.staffApplicantsGenerated, {
+		newApplicants : newApplicants
+		settings : settings
+		rng : random
+	}
+	applicants = []
+	for i in [0...count]
+		if random.random() >= 0.5
+			a = newApplicants.pickRandom(random)
+			applicants.push(a)
+			newApplicants.remove(a)
+		else
+			a = oldApplicants.pickRandom(random)
+			applicants.push(a)
+			oldApplicants.remove(a)
+	return applicants

@@ -43,3 +43,9 @@
 * SDP.GDT.addReviewMessage(item) - adds a review message to the choosable list, requires the patches source
 	* If item is SDP.GDT.ReviewMessage then automatically converts it to a primitive object
 	* Follows the [Review Message](./Object_Types/Review_Message.md) Object Type
+
+* SDP.GDT.addApplicantFunctor(item) - adds a applicant functor that could be selected
+	* Follows the [Applicant Functor](./Object_Types/App_Functor.md) Object Type
+
+* SDP.GDT.addFamousFunctor(item) - adds a famous applicant functor that could be selected
+	* Follows the [Famous Applicant Functor](./Object_Types/Famous_App_Functor.md) Object Type

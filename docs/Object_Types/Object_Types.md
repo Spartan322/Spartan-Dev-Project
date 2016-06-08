@@ -13,6 +13,8 @@ Note: defaults are what the behavior acts like if the optional value was not ass
 * [Event](Event.md)
 * [Publisher](Publisher.md)
 * [Contract](Contract.md)
+* [Applicant Functor](App_Functor.md)
+* [Famous Applicant Functor](Famous_App_Functor.md)
 * [Company](Company.md)
 * [Reviewer](Reviewer.md)
 * [Review Message](Review_Message.md)
