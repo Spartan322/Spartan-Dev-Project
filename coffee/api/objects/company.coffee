@@ -1,37 +1,21 @@
 class SDP.GDT.Company
-	@companies: new SDP.Util.Map
-	
-	getName: -> ""
-	
-	loadConsoles = (company) ->
-		if Platforms.allPlatforms.indexOf((val) -> val.company is company.getName()) isnt -1
-			company.platforms.push Platforms.allPlatforms.filter (val) -> val.company is company.getName()
-	
-	@getCompany: (name) ->
-		c = Company.companies.get(name)
-		return c if c?
-		c = new Company
-		c.getName = -> name
-		c.platforms = []
-		loadConsoles(c)
-		Company.companies.add(c)
-		c
-	
-	@MIRCONOFT = @getCompany("Micronoft")
-	#@GREENHEART = @getCompany("Greenheart Games") # Normally doesn't exist, does this meet mod compliance?
-	@GRAPPLE = @getCompany("Grapple")
-	@GOVADORE = @getCompany("Govodore")
-	@NINVENTO = @getCompany("Ninvento")
-	@VENA = @getCompany("Vena")
-	@VONNY = @getCompany("Vonny")
-	@KICKIT = @getCompany("KickIT")		
-		
-	addPlatform: (platform) =>
-		if @platforms.findIndex((val) -> platform.getId() is val.getId()) is -1
-			platform.company = this
-			@platforms.push(platform.add())
-			
+
+	constructor: (name, id = name.replace(/\s/g,"")) ->
+		c = Companies.getAllCompanies().find (val) -> val.id is id
+		c = Companies.createCompany({name: name, id: id}) unless c?
+		@platforms = c.platforms
+		@addPlatform = c.addPlatform
+		@addPlatform.bind(@)
+		@sort = c.sort
+		@sort.bind(@)
+		name = c.name
+		@getName = -> name
+		id = c.id
+		@getId = -> id
+
 	getPlatform: (name) =>
-		return @platforms.find((val) -> platform.name is name)
-		
+		p = @platforms.find((val) -> platform.name is name)
+		p = @platforms.find((val) -> platform.id is name) unless p?
+		p
+
 	toString: => @getName()

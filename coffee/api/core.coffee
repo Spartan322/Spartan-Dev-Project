@@ -83,9 +83,10 @@ SDP.GDT.triggerNotification = (item) ->
 	if GameManager?.company?.notifications? then GameManager.company.notifications.push(item) else SDP.GDT.Internal.notificationsToTrigger.push(item)
 
 SDP.GDT.addEvent = (item) ->
-	if SDP.GDT.Event? and item instanceof SDP.GDT.Event then item = item.toInput() else
-		item = item.getEvent() if item.getEvent?
-		item = item.event if item.event?
+	item = item.getEvent() if item.getEvent?
+	item = item.event if item.event?
+	item = item.toInput() if SDP.GDT.Event? and item instanceof SDP.GDT.Event
+	item.notification = item.notification.toInput() if SDP.GDT.Notification? and item.notification instanceof SDP.GDT.Notification
 	GDT.addEvent(item)
 
 SDP.GDT.addCompany = (item) ->
@@ -113,7 +114,7 @@ SDP.GDT.getOverridePositions = (genre, category) ->
 	for g, i in SDP.Enum.Genre.toArray()
 		if genre is g
 			for c, ci in SDP.Enum.ResearchCategory.toArray()
-				if c is category then return [i,ci]
+				if c is category then return [i, ci]
 			break
 	return undefined
 
@@ -130,6 +131,7 @@ Companies.createCompany = (item) ->
 		item.platforms.sort (a,b) ->
 			General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published)
 	item.addPlatform = (platform) ->
+		return if item.platforms.find((val) -> platform.id is val.id)?
 		platform.company = item.name
 		SDP.GDT.addPlatform(platform)
 		item.platforms.push(platform)
@@ -153,7 +155,7 @@ Companies.vanillaCompanies = [
 Companies.moddedCompanies = []
 Companies.getAllCompanies = ->
 	c = Companies.vanillaCompanies.filter (val) -> val.id?
-	c.push(Companies.moddedCompanies.filter (val) -> val.id?)
+	c.addRange(Companies.moddedCompanies.filter (val) -> val.id?)
 	for comp of c
 		comp.sort = ->
 			comp.platforms.sort (a,b) ->

@@ -12,11 +12,11 @@ class SDP.GDT.Weight
 			val4 = val4.clamp(MIN_VAL,MAX_VAL)
 			val5 = val5.clamp(MIN_VAL,MAX_VAL)
 			val6 = val6.clamp(MIN_VAL,MAX_VAL)
-			arr.push(val4, val5, val6) 
+			arr.push(val4, val5, val6)
 		@get = -> arr
-		
+
 	isAudience: () => not @isGenre()
-	
+
 	toAudience: () =>
 		if @isAudience() then return this
 		a = @get()

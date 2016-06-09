@@ -252,13 +252,13 @@ ProjectContracts.genericContracts.getContract = (company) ->
 	genCon = SDP.GDT.Internal.generateContracts
 	resultContracts = []
 	contracts = ProjectContracts.genericContracts.__oldGetContract(company)
-	contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4)
+	contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4)
 	if company.flags.mediumContractsEnabled
 		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "medium")
-		contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3))
+		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3))
 	if company.flags.largeContractsEnabled
 		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "large")
-		contracts.push genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2))
+		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2))
 	return contracts.shuffle(random).filter (c) -> not c.skip
 
 SDP.GDT.Internal.generateContracts = (company, settings, sourceSet, size, maxNumber) ->
@@ -332,7 +332,7 @@ Reviews.vanillaReviewers = [
 ]
 Reviews.getAllReviewers = ->
 	result = Reviews.vanillaReviewers.slice()
-	result.push(Reviews.moddedReviewers.slice())
+	result.addRange(Reviews.moddedReviewers.slice())
 	result
 
 Reviews.getAvailableReviewers = (company) ->
@@ -361,7 +361,7 @@ Reviews.getModdedPositiveMessages = (game, score) ->
 	for m in Reviews.moddedMessages when m.isPositive and not m.isNegative
 		if m.getMessage?
 			result.push(m.getMessage(game, score))
-		else result.push(m.message)
+		else if m.message? then result.push(m.message)
 	result
 
 Reviews.getModdedNegativeMessages = (game, score) ->
@@ -369,7 +369,7 @@ Reviews.getModdedNegativeMessages = (game, score) ->
 	for m in Reviews.moddedMessages when m.isNegative and not m.isPositive
 		if m.getMessage?
 			result.push(m.getMessage(game, score))
-		else result.push(m.message)
+		else if m.message? then result.push(m.message)
 	result
 
 Reviews.getModdedGenericMessages = (game, score) ->
@@ -377,7 +377,7 @@ Reviews.getModdedGenericMessages = (game, score) ->
 	for m in Reviews.moddedMessages when not m.isNegative and not m.isPositive
 		if m.getMessage?
 			result.push(m.getMessage(game, score))
-		else result.push(m.message)
+		else if m.message? then result.push(m.message)
 	result
 
 Reviews.__oldGetGenericReviewMessage = Reviews.getGenericReviewMessage
@@ -393,8 +393,8 @@ Reviews.getReviews = (game, finalScore, positiveMessages, negativeMessages) ->
 	usedMessages = []
 	scores = []
 	variation = 1
-	positiveMessages.push(Reviews.getModdedPositiveMessages(game))
-	negativeMessages.push(Reviews.getModdedNegativeMessages (game))
+	positiveMessages.addRange(Reviews.getModdedPositiveMessages(game))
+	negativeMessages.addRange(Reviews.getModdedNegativeMessages (game))
 	for i in [0...4] {
 		if intScore is 5 or intScore is 6
 			variation = if game.company.getRandom() < 0.05 then 2 else 1

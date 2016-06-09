@@ -4,7 +4,7 @@ SDP.GDT.__notUniqueEvent = (id) ->
 	not Checks.checkUniqueness(item, 'id', DecisionNotifications.modNotifications)
 
 class SDP.GDT.Event
-	
+
 	constructor: (id, @date, @isRandomEvent,  @ignoreLenMod) ->
 		unless id? then throw new TypeError("id can't be undefined")
 		if id instanceof Event
@@ -28,7 +28,7 @@ class SDP.GDT.Event
 			@maxTriggers = e.maxTriggers
 			@trigger = e.trigger
 			@complete = e.complete
-			@getNotification = unless e.notification? then e.getNotification else ((company) -> e.notification) 
+			@getNotification = unless e.notification? then e.getNotification else ((company) -> e.notification)
 		else
 			@maxTriggers = 1
 			@trigger = (company) -> false
@@ -36,11 +36,10 @@ class SDP.GDT.Event
 			@getNotification = (company) -> new SDP.GDT.Notification(this)
 			@getId = -> id
 		@getNotification.bind(this)
-		
-	toInput: =>
-		id = @getId()
 		id += '_' while SDP.GDT.__notUniqueEvent(id)
 		@getId = -> id
+
+	toInput: =>
 		{
 			id: @getId()
 			date: @date unless @date instanceof SDP.GDT.Date then @date.toString()
@@ -51,6 +50,6 @@ class SDP.GDT.Event
 			getNotification: @getNotification
 			complete: @complete
 		}
-	
+
 	add: =>
-		GDT.addEvent(@toInput())
+		GDT.addEvent(@)
