@@ -1,6 +1,4 @@
 "use strict"
-SDP = {}
-
 ###
 Enums: enumerable objects
 ###
@@ -121,7 +119,6 @@ SDP.GDT.getOverridePositions = (genre, category) ->
 ###
 Adds company tracking system
 ###
-Companies = {}
 Companies.createCompany = (item) ->
 	if item.constructor is String then item = {name: item}
 	if not item.id? and item.name? then item.id = name.replace(/\s/g,"")

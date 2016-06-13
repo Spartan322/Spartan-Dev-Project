@@ -1,4 +1,4 @@
-/*
+`/*
  * ----------------------------- JSTORAGE -------------------------------------
  * Simple local storage wrapper to save data on the browser side, supporting
  * all major browsers - IE6+, Firefox2+, Safari4+, Chrome4+ and Opera 10.5+
@@ -993,4 +993,4 @@
     // Initialize jStorage
     _init();
 
-})();
+})()`
