@@ -72,5 +72,5 @@ SDP.Graphical = ((s) ->
 		selection.append(content)
 
 	s
-)(SDP.Graphical or {}
+)(SDP.Graphical or {})
 

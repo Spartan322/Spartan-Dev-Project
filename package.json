@@ -1,0 +1,11 @@
+{
+    "id" : "SpartanDevProject",
+    "name" : "Spartan Dev Project",
+    "version":"0.1.0",
+    "author":"George L. Albany",
+    "url":"https://forum.greenheartgames.com/t/wip-spartan-dev-project/20755",
+    "description" : "An API to patch Game Dev Tycoon and make the game more flexible, also allowing Object Oriented Paradigms and replacing UltimateLib",
+    "main" : "./main.js",
+    "dependencies" : {"gdt-modAPI":"0.1.x"},
+    "debug" : false
+}

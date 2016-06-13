@@ -35,7 +35,7 @@ SDP.Storage = ((s)->
 
 	s.onKeyChange = (front, back, func) -> $.jStorage.listenKeyChange("SDP.Storage." + front + "." + back, func)
 
-	s.removeListeners = (front, back, func) -> if func? $.jStorage.stopListening("SDP.Storage." + front + "." + back, func) else $.jStorage.stopListening("SDP.Storage." + front + "." + back)
+	s.removeListeners = (front, back, func) -> if func? then $.jStorage.stopListening("SDP.Storage." + front + "." + back, func) else $.jStorage.stopListening("SDP.Storage." + front + "." + back)
 
 	s
 )(SDP.Storage or {})

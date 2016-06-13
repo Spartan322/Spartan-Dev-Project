@@ -4,7 +4,7 @@ SDP.Util.getRandomInt = (random, max) -> Math.max max - 1, Math.floor random.ran
 
 SDP.Util.generateNewSeed = (settings) ->
 	settings.seed = Math.floor(Math.random() * 65535);
-	settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1E3;
+	settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3;
 	settings.contractsDone = []
 
 SDP.Util.getSeed = (settings) ->

@@ -166,7 +166,7 @@ SDP.GDT.Internal.generatePublisherContracts = (company, settings, maxNumber) ->
 	audiences = SDP.Enum.Audience.toArray()
 	publishers = ProjectContracts.getAvailablePublishers(company)
 	publishers.push(ProjectContracts.getPublishingCompanies(company))
-	sizeBasePay = { medium:15E4, large:15E5/2 }
+	sizeBasePay = { medium:15e4, large:15e5/2 }
 	for i in [0...count]
 		if platform and (platform.company and random.random() <= 0.2)
 			publisher = publishers.find((val) -> val.toString() is platform.company)
@@ -202,14 +202,14 @@ SDP.GDT.Internal.generatePublisherContracts = (company, settings, maxNumber) ->
 			break unless platform? and not Platforms.doesPlatformSupportGameSize(platform, size)
 		basePay = sizeBasePay[size]
 		pay = basePay * (minScore/10)
-		pay /= 5E3
-		pay = Math.max(1, Math.floor(pay)) * 5E3
+		pay /= 5e3
+		pay = Math.max(1, Math.floor(pay)) * 5e3
 		penalty = pay * 1.2 + pay * 1.8 * random.random()
-		penalty /= 5E3
-		penalty = Math.floor(penalty) * 5E3
+		penalty /= 5e3
+		penalty = Math.floor(penalty) * 5e3
 		royaltyRate = Math.floor(7 + 8 * difficulty) / 100
-		name = "#{if topic then topic.name else "Any Topic".localize()} / #{if genre then genre.name else "Any Genre".localize()}"
-		if not platform or Platforms.getPlatformsOnMarket(company).first (p) -> p.id is platform.id
+		name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+		if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
 			pubName = if publisher.getName? then publisher.getName() else publisher.toString()
 			contracts.push {
 				id: "publisherContracts"
@@ -255,10 +255,10 @@ ProjectContracts.genericContracts.getContract = (company) ->
 	contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4)
 	if company.flags.mediumContractsEnabled
 		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "medium")
-		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3))
+		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3)
 	if company.flags.largeContractsEnabled
 		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "large")
-		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2))
+		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2)
 	return contracts.shuffle(random).filter (c) -> not c.skip
 
 SDP.GDT.Internal.generateContracts = (company, settings, sourceSet, size, maxNumber) ->
@@ -280,7 +280,7 @@ SDP.GDT.Internal.generateContracts = (company, settings, sourceSet, size, maxNum
 
 SDP.GDT.Internal.generateSpecificContract = (company, template, size, random) ->
 	r = random.random()
-	r += random.random() if(random.random() > 0.8
+	r += random.random() if random.random() > 0.8
 	minPoints = 11
 	minPoints = 30 if size is "medium"
 	minPoints = 100 if size is "large"
@@ -295,14 +295,14 @@ SDP.GDT.Internal.generateSpecificContract = (company, template, size, random) ->
 	t += t * 0.2 * random.random() * random.randomSign()
 	d = Math.floor(d)
 	t = Math.floor(t)
-	pay = points * 1E3
-	pay /= 1E3
-	pay = Math.floor(pay) * 1E3
+	pay = points * 1e3
+	pay /= 1e3
+	pay = Math.floor(pay) * 1e3
 	weeks = Math.floor(3 + 7 * random.random())
 	weeks = Math.floor(3 + 3 * random.random()) if size is "small"
 	penalty = pay * 0.2 + pay * 0.3 * random.random()
-	penalty /= 1E3
-	penalty = Math.floor(penalty) * 1E3
+	penalty /= 1e3
+	penalty = Math.floor(penalty) * 1e3
 	return {
 		name : template.name,
 		description : template.description
@@ -395,7 +395,7 @@ Reviews.getReviews = (game, finalScore, positiveMessages, negativeMessages) ->
 	variation = 1
 	positiveMessages.addRange(Reviews.getModdedPositiveMessages(game))
 	negativeMessages.addRange(Reviews.getModdedNegativeMessages (game))
-	for i in [0...4] {
+	for i in [0...4]
 		if intScore is 5 or intScore is 6
 			variation = if game.company.getRandom() < 0.05 then 2 else 1
 		scoreVariation = if Math.randomSign() is 1 then 0 else variation * Math.randomSign()
@@ -426,7 +426,6 @@ Reviews.getReviews = (game, finalScore, positiveMessages, negativeMessages) ->
 			message : message
 			reviewerName : reviewers[i].name
 		}
-	}
 	return reviews
 
 ###
@@ -581,7 +580,7 @@ UI._generateJobApplicants = ->
 		takenNames.push(name)
 		salary = Character.BASE_SALARY_PER_LEVEL * level
 		salary += salary * 0.2 * random.random() * random.randomSign()
-		salary = Math.floor(salary/1E3) * 1E3
+		salary = Math.floor(salary/1e3) * 1e3
 		newApplicants.push {
 			name : name,
 			qualityFactor : q,
