@@ -3,33 +3,29 @@
 /*
 Implements the log functionality of UltimateLib, allows easy conversion from UltimateLib
  */
-
-(function() {
-  SDP.Logger = (function(s) {
-    var toTimeStr;
-    toTimeStr = function(date) {
-      var forceZero;
-      return forceZero = function(n) {
-        if (n >= 0 && n < 10) {
-          return "0" + e;
-        } else {
-          return e + "";
-        }
-      };
-    };
-    return [[forceZero(date.getFullYear()), forceZero(date.getMonth() + 1), date.getDate()].join("-"), [forceZero(date.getHours()), forceZero(date.getMinutes()), forceZero(date.getSeconds())].join(":")].join(" ");
-    s.enabled = false;
-    s.log = function(e, c) {
-      var str, timestamp;
-      if (!s.enabled) {
-        return;
+SDP.Logger = (function(s) {
+  var toTimeStr;
+  toTimeStr = function(date) {
+    var forceZero;
+    return forceZero = function(n) {
+      if (n >= 0 && n < 10) {
+        return "0" + e;
+      } else {
+        return e + "";
       }
-      timestamp = toTimeStr(new Date());
-      str = "";
-      str = c != null ? timestamp + " : Error! " + e + "\n " + c.message : timestamp + " : " + e;
-      return console.log(str);
     };
-    return s;
-  })(SDP.Logger || {});
-
-}).call(this);
+  };
+  return [[forceZero(date.getFullYear()), forceZero(date.getMonth() + 1), date.getDate()].join("-"), [forceZero(date.getHours()), forceZero(date.getMinutes()), forceZero(date.getSeconds())].join(":")].join(" ");
+  s.enabled = false;
+  s.log = function(e, c) {
+    var str, timestamp;
+    if (!s.enabled) {
+      return;
+    }
+    timestamp = toTimeStr(new Date());
+    str = "";
+    str = c != null ? timestamp + " : Error! " + e + "\n " + c.message : timestamp + " : " + e;
+    return console.log(str);
+  };
+  return s;
+})(SDP.Logger || {});

@@ -1,1 +1,1 @@
-coffee --compile --output js/ coffee/
+coffee -b -c --output js/ coffee/

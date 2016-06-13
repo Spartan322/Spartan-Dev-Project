@@ -1,9 +1,8 @@
 /**
 	All Commented file names are still a WIP
 */
-
 var ___sdpBaseDir = 'mods/SpartanDevProject/js/api/'
-var ___sdpObjsDir = base+'/objects/'
-var files = [base+'core.js', base+'util.js', base+'patches.js', base+'storage.js', base+'log.js', base+'graphical.js', base+'patches.js', base+'/3rd/jstorage.js', base+'patches.js', objs+'company.js', objs+'contracts.js', objs+'date.js', objs+'event.js', objs+'notification.js', objs+'platform.js', objs+'publisher.js', objs+'research.js', /*objs+'research_project.js',*/ /*objs+'reviewer.js',*/ objs+'topic.js', /*objs+'training.js',*/ objs+'weight.js', objs+'/util/enum.js', objs+'util/map.js', objs+'util/util.js']
+var ___sdpObjsDir = ___sdpBaseDir+'/objects/'
+var files = [___sdpBaseDir+'core.js', ___sdpBaseDir+'util.js', ___sdpBaseDir+'patches.js', ___sdpBaseDir+'storage.js', ___sdpBaseDir+'log.js', ___sdpBaseDir+'graphical.js', ___sdpBaseDir+'patches.js', ___sdpBaseDir+'/3rd/jstorage.js', ___sdpBaseDir+'patches.js', ___sdpObjsDir+'company.js', ___sdpObjsDir+'contracts.js', ___sdpObjsDir+'date.js', ___sdpObjsDir+'event.js', ___sdpObjsDir+'notification.js', ___sdpObjsDir+'platform.js', ___sdpObjsDir+'publisher.js', ___sdpObjsDir+'research.js', /*___sdpObjsDir+'research_project.js',*/ /*___sdpObjsDir+'reviewer.js',*/ ___sdpObjsDir+'topic.js', /*___sdpObjsDir+'training.js',*/ ___sdpObjsDir+'weight.js', ___sdpObjsDir+'/util/enum.js', ___sdpObjsDir+'util/map.js', ___sdpObjsDir+'util/util.js']
 
 GDT.loadJs(files, function() {}, function() {});
