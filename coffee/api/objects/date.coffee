@@ -1,6 +1,5 @@
 class SDP.GDT.Date
 
-	MAX_DATE = SDP.GDT.Date(260,12,4)
 	REQUIRED_VALS = 3
 
 	constructor: (@year = 1, @month = 1, @week = 1) ->
@@ -19,6 +18,8 @@ class SDP.GDT.Date
 		@year = 1 if typeof @year isnt 'number'
 		@month = 1 if typeof @month isnt 'number'
 		@week = 1 if typeof @week isnt 'number'
+	
+	MAX_DATE = SDP.GDT.Date(260,12,4)
 
 	@Max: ->
 		return Date(MAX_DATE)

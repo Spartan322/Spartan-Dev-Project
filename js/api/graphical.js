@@ -50,13 +50,13 @@ SDP.Graphical = (function(s) {
   sdpElement.appendTo(div);
   div2.appendTo(div);
   panelChildren.appendTo(div.find("#SDPConfigurationDefaultTabPanel").first());
-  div.appendTo(UltimateLib.Elements.SettingsPanel);
+  div.appendTo(SDP.Graphical.Elements.SettingsPanel);
   div.tabs();
   div.find(".ui-tabs .ui-tabs-nav li a").css({
     fontSize: "7pt"
   });
-  UltimateLib.Visuals.Custom.setCss("advanceOptionsCss", "#newGameView .featureSelectionPanel { overflow-x: none overflow-y: auto }</style>");
-  UltimateLib.Visuals.Custom.setCss("settingPanelCss", ".ui-dialog .ui-dialog-content { padding: .5em 1em 1em .5em overflow-x: none overflow-y: visible }");
+  SDP.Graphical.Visuals.Custom.setCss("advanceOptionsCss", "#newGameView .featureSelectionPanel { overflow-x: none overflow-y: auto }</style>");
+  SDP.Graphical.Visuals.Custom.setCss("settingPanelCss", ".ui-dialog .ui-dialog-content { padding: .5em 1em 1em .5em overflow-x: none overflow-y: visible }");
   a.setLayoutCss = function(modName) {
     var b;
     b = $('link[href$="layout.css"]');

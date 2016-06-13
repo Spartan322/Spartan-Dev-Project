@@ -2,8 +2,6 @@
 SDP.GDT.Date = (function() {
   var MAX_DATE, REQUIRED_VALS;
 
-  MAX_DATE = SDP.GDT.Date(260, 12, 4);
-
   REQUIRED_VALS = 3;
 
   function Date(year, month, week) {
@@ -35,6 +33,8 @@ SDP.GDT.Date = (function() {
       this.week = 1;
     }
   }
+
+  MAX_DATE = SDP.GDT.Date(260, 12, 4);
 
   Date.Max = function() {
     return Date(MAX_DATE);
