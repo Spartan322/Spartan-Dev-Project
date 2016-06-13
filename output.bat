@@ -1,1 +1,1 @@
-coffee -b -c --output js/ coffee/
+coffee -b -c main.coffee

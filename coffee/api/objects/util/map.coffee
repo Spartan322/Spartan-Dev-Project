@@ -1,4 +1,3 @@
-
 class SDP.Util.Map
 	constructor: (@origArr...) ->
 		@nameArray = []

@@ -1,0 +1,1 @@
+This is a directory to make it easier to track the Spartan Dev Project, breaking it down into smaller bite sized chunks, not for production use
