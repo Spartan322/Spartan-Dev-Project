@@ -1,94 +1,93 @@
+### Definitions for the devised SpartaDoc
+All types can either contain the name of the types as found here or the vanilla API as analogs, this is corrected by the SDP
+---
+@customType ResearchItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [String] category The SDP.Constants.ResearchCategory of the object
+@attribute [String] categoryDisplayName Similar to category except may also be
+---
+@customType PlatformItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [CompanyItem] company The company this platform belongs to
+@attribute [Float] startAmount The starting amount of units sold on release (multiplied by 5000000)
+@attribute [Float] unitsSold The resulting units sold by the end (multiplied by 5000000)
+@attribute [Integer] licensePrice The one time license price to develop on the platform
+@attribute [String] publishDate The release date of the platform
+@attribute [String] retireDate The retire date of the platform
+@attribute [Integer] devCost The dev cost for developing on the platform
+@attribute [Integer] techLevel The tech level of the platform (1-9, determines how ingenious games and the platform is)
+@attribute [String] iconUri The icon refered to for the icon of the platform (or base uri if contains imageDates)
+@attribute [Array {String date, Float amount}] marketKeyPoints The key date points of the market in which the units sold change to the amount
+@attribute [Array [6 Float]] genreWeight The weightings per genre based on SDP.Constants.Genre
+@attribute [Array [3 Float]] audienceWeight The weightings per audience based on SDP.Constants.Audience
+@optional @attribute [Array [String]] imageDates The dates for the platform image to change
+---
+@customType TopicItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [Array [6 Float]] genreWeight The weightings per genre based on SDP.Constants.Genre
+@attribute [Array [3 Float]] audienceWeight The weightings per audience based on SDP.Constants.Audience
+@attribute [Array [6 Array [9 Float]]] overrides The mission overrides as described on the [wiki](https://github.com/greenheartgames/gdt-modAPI/wiki/missionOverrides)
+---
+@customType ResearchProjectItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [String] description The description of the project
+@attribute [Integer] pointsCost The cost to make in research points
+@attribute [String] iconUri The uri of the icon to display for the project
+@attribute [Integer] targetZone The zone for the project to take place in (0 for Hardware Lab, 2 for Research Lab, Effects of 1 unknown)
+@optional @attribute [Boolean] repeatable Determiners whether the project can be repeated
+@optional @attribute [Function(CompanyItem)] canResearch Determines whether research can be done
+	@fparam [CompanyItem] company The company being tested
+	@freturn [Boolean] Whether research can be done on the project
+@optional @attribute [Function(CompanyItem)] complete A function to perform on completion
+	@fparam [CompanyItem] company The company responsible for completing the project
+@optional @attribute [Function(CompanyItem)] cancel Activates on cancelation of the project
+	@fparam [CompanyItem] company The company canceling the project
+---
+@customType TrainingItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [Integer] pointsCost The cost in research points
+@attribute [Integer] duration How long it will take to complete the training
+---
+@customType ContractItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+@attribute [String] description The description of the contract
+---
+@customType PublisherItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+---
+@customType ReviewerItem
+@attribute [String] id The unique id of the item
+@attribute [String] name The name of the item
+---
+@customType ReviewMessageItem
+@attribute [String] id The unique id of the item
+---
+@customType NotificationItem
+@attribute [String] header The header of the notification
+@attribute [String] text The text to display upon notifcation being tiggered
+@instruction('optional' if 'options')
+	@attribute [String] buttonTxt The text for the button to display
+@instruction('optional' if 'buttonTxt')
+	@attribute [Array [1-3 String]] options A collection of possible button options to choose from
+@attribute [String] image The image uri for the notification
+@attribute [String] sourceId The id of the corresponding event object
+@attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+###
+
+
+# @namespace Spartan Dev Project
+#
+# The primary namespace holding all of the SDP
 SDP = {}
 Companies = {}
 JobApplicants = {}
-SDP.Util = {}
-
-###
-UTIL OBJS
-###
-###
-Usage:
-new Enum('name of enum', 'first enum name', 'first enum value', ...)
-or
-Enum.Generate('name of enum', 'first enum value', 'second enum value', ...)
-is equal to
-new Enum('name of enum', 'FIRST_ENUM_VALUE', 'first enum value', 'SECOND_ENUM_VALUE', 'second enum value', ...)
-
-You can also access an enum's value by getting its name for example:
-enum = Enum.Generate('enum', 'vals', 'vals2')
-enum.VALS is now 'vals'
-enum. VALS2 is now 'vals2'
-###
-class SDP.Util.Enum
-	consturctor: (name, values...) ->
-		@values = []
-		for v, i in values
-			if v.name? and v.value? then @values.push(v)
-			else if i%2 is 0 then @values.push({name: v.toString(), value: undefined}) else @values[@values.length-1].value = v
-		@getName = -> name
-		Object.defineProperty(this, 'values', { value: @values, enumerable: true })
-		for v in @values
-			@[v.name] = v.value
-
-	get: (indexOrName) =>
-		@values[indexOrName] if typeof indexOrName is 'number'
-		@values.find((val) -> name is indexOrName) if typeof indexOrName is 'string'
-
-	toArray: =>
-		a = []
-		a.push e.value for e in @values
-		a
-
-	toString: =>
-		@str if @str?
-		str = "Enum #{@getName()}: "
-		str += "#{v.name}:#{v.value}, " for v, i in @values when i < @values.length-1
-		v = @values[@values.length-1]
-		str += "#{v.name}:#{v.value}"
-		@str = str
-		str
-
-	@Generate: (name, values...) ->
-		resultVals = []
-		for v in values
-			resultVals.push(v.toUpperCase().replace("/","").replace(/\s/g,"_"), v)
-		new Enum(name, resultVals)
-
-class SDP.Util.Map
-	constructor: (@origArr...) ->
-		@nameArray = []
-		@map = {}
-		for obj in @origArr
-			@add(obj)
-
-	add: (obj, getterName = "getName") =>
-		if typeof obj[getterName] is 'function'
-			@addByName(obj[getterName](), obj)
-		else if typeof obj.toString is 'function'
-			@addByName(obj.toString(), obj)
-
-	addByName: (name, obj) =>
-		name = String(name)
-		@map[name] = obj
-		@nameArray.push(name)
-
-	get: (name) =>
-		@map[String(name)]
-
-	containsKey: (name) =>
-		@map[String(name)]?
-
-	containsVal: (val) =>
-		for obj in @map
-			return true if obj is val
-		return false
-
-	toArray: =>
-		a = @cachedArray.slice(0)
-		a.push(@get(n)) for n in @nameArray when a.indexOf(@get(n)) is -1
-		@cachedArray = a.slice(0)
-		a
-
 
 ###
 jSTORAGE
@@ -109,52 +108,113 @@ b){a=(a||"").toString();if(!a)throw new TypeError("Channel not defined");t[a]||(
 window)try{window.localStorage.setItem("_tmptest","tmpval"),a=!0,window.localStorage.removeItem("_tmptest")}catch(b){}if(a)try{window.localStorage&&(h=window.localStorage,f="localStorage",r=h.jStorage_update)}catch(c){}else if("globalStorage"in window)try{window.globalStorage&&(h="localhost"==window.location.hostname?window.globalStorage["localhost.localdomain"]:window.globalStorage[window.location.hostname],f="globalStorage",r=h.jStorage_update)}catch(k){}else if(g=document.createElement("link"),
 g.addBehavior){g.style.behavior="url(#default#userData)";document.getElementsByTagName("head")[0].appendChild(g);try{g.load("jStorage")}catch(d){g.setAttribute("jStorage","{}"),g.save("jStorage"),g.load("jStorage")}a="{}";try{a=g.getAttribute("jStorage")}catch(m){}try{r=g.getAttribute("jStorage_update")}catch(e){}h.jStorage=a;f="userDataBehavior"}else{g=null;return}D();x();"localStorage"==f||"globalStorage"==f?"addEventListener"in window?window.addEventListener("storage",u,!1):document.attachEvent("onstorage",
 u):"userDataBehavior"==f&&setInterval(u,1E3);E();"addEventListener"in window&&window.addEventListener("pageshow",function(a){a.persisted&&u()},!1)})()})()`
-
 ###
-CORE
+jSTORAGE End
 ###
 "use strict"
-###
-Enums: enumerable objects
-###
-SDP.Enum = {}
 
-SDP.Enum.ResearchCategory = SDP.Util.Enum.Generate('ResearchCategory',
-'Engine',
-'Gameplay',
-'Story/Quests',
-'Dialogs',
-'Level Design',
-'AI',
-'World Design',
-'Graphic',
-'Sound')
+SDP.Util = (->
+	util = {}
 
-SDP.Enum.Audience = SDP.Util.Enum.Generate('Audience',
-'young',
-'everyone',
-'mature')
+	util.isString = (obj) -> obj.constructor is String
+	util.isArray = (obj) -> obj.constructor is Array
+	util.isNumber = (obj) -> not isNaN(obj)
+	util.isInteger = (obj) -> util.isNumber(obj) and Number.isInteger(obj)
+	util.isFloat = (obj) -> util.isNumber(obj) and not Number.isInteger(obj)
+	util.isObject = (obj) -> obj.constructor is Object
+	util.isBoolean = (obj) -> obj is true or obj is false
 
-SDP.Enum.Genre = SDP.Util.Enum.Generate('Genre',
-'Action',
-'Adventure',
-'RPG',
-'Simulation',
-'Strategy',
-'Casual')
+	util.getOverridePositions = (genre, category) ->
+		genre = genre.replace(/\s/g, "")
+		category = category.replace(/\s/g, "")
+		for g, i in SDP.Constants.Genre
+			if genre is g
+				if category is null then return [i]
+				for c, ci in SDP.Constants.ResearchCategory
+					if c is category then return [i, ci]
+				break
+		return undefined
 
-###
-Addition Functions: adds basic game objects
-###
-SDP.GDT = {}
+	class util.Image
+		constructor: (@uri)->
 
-SDP.GDT.addResearchItem = (item) ->
+		exists: ->
+			doesExist = true
+			fs.access(@uri, fs.constants.F_OK, (err) ->
+				if err then doesExist = false
+			)
+			doesExist
+
+	class util.Weight
+		constructor: (w1 = 0.8, w2 = w1, w3 = w2, w4, w5 = w4, w6 = w5) ->
+			if w1 is true or (not util.isNumber(w1) and not util.isArray(w1)) then @arr = [0.8,0.8,0.8]
+			else if w1 is false then @arr = [0.8,0.8,0.8,0.8,0.8,0.8]
+			else
+				if util.isArray(w1) then @arr = w1
+				else
+					@arr = [w1,w2,w3]
+					if w4 then @arr.push(w4,w5,w6)
+				@arr[i] = num/100 for num, i in @arr when num > 1
+			@isGenre = -> @arr.length is 6
+			@isAudience = -> @arr.length is 3
+
+	util
+)()
+
+# @namespace Constants
+#
+# The constants of the SPD
+SDP.Constants = {
+
+	# Categories of development
+	ResearchCategory: [
+		'Engine'
+		'Gameplay'
+		'Story/Quests'
+		'Dialogs'
+		'Level Design'
+		'AI'
+		'World Design'
+		'Graphic'
+		'Sound'
+	]
+
+	# Audiences to target
+	Audience: [
+		'young'
+		'everyone'
+		'mature'
+	]
+
+	# Genres to choose for games
+	Genre: [
+		'Action'
+		'Adventure'
+		'RPG'
+		'Simulation'
+		'Strategy'
+		'Casual'
+	]
+}
+
+# @namespace Functional
+#
+# Contains the function interface for the SDP
+SDP.Functional = {}
+
+# Registers a Research item
+#
+# @param [ResearchItem] item The item to register
+SDP.Functional.addResearchItem = (item) ->
 	item = item.toInput() if SDP.GDT.Research? and item instanceof SDP.GDT.Research
 	if item.v? then GDT.addResearchItem(item) else
 		Research.engineItems.push(item) if Checks.checkPropertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.checkUniqueness(item, 'id', Research.getAllItems())
 	return
 
-SDP.GDT.addPlatform = (item) ->
+# Registers a Platform item
+#
+# @param [PlatformItem] item The item to register
+SDP.Functional.addPlatform = (item) ->
 	item = item.toInput() if SDP.GDT.Platform? and item instanceof SDP.GDT.Platform
 	if item.iconUri? then GDT.addPlatform(item) else
 		if Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) and Checks.checkAudienceWeightings(item.audienceWeightings) and Checks.checkGenreWeightings(item.genreWeightings) and Checks.checkDate(item.published) and Checks.checkDate(item.platformRetireDate)
@@ -167,20 +227,64 @@ SDP.GDT.addPlatform = (item) ->
 				GDT.addEvent(event) unless event instanceof SDP.GDT.Event then event.add()
 	return
 
-SDP.GDT.addTopic = (item) ->
+# Registers a Topic item
+#
+# @param [TopicItem] item The item to register
+SDP.Functional.addTopic = (item) ->
 	item = item.toInput() if SDP.GDT.Topic? and item instanceof SDP.GDT.Topic
 	item.genreWeightings = item.genreWeightings.toGenre().get() if SDP.GDT.Weight? and item.genreWeightings instanceof SDP.GDT.Weight
 	item.audienceWeightings = item.audienceWeightings.toAudience().get() if SDP.GDT.Weight? and item.audienceWeightings instanceof SDP.GDT.Weight
 	GDT.addTopic(item)
 
-SDP.GDT.addResearchProject = (item) ->
+# Registers a Research Project item
+#
+# @param [ResearchProjectItem] item The item to register
+SDP.Functional.addResearchProject = (item) ->
 	item = item.toInput() if SDP.GDT.ResearchProject? and item instanceof SDP.GDT.ResearchProject
 	item.canResearch = ((company)->true) unless item.canResearch?
 	if Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) and Checks.checkUniqueness(item, 'id', Research.bigProjects)
 		Research.bigProjects.push(item)
 	return
 
-SDP.GDT.triggerNotification = (item) ->
+# Registers a Training item
+#
+# @param [TrainingItem] item The item to register
+SDP.Functional.addTrainingItem = (item) ->
+
+	return
+
+# Registers a Contract item
+#
+# @param [ContractItem] item The item to register
+SDP.Functional.addContractItem = (item) ->
+
+	return
+
+# Registers a Publisher item
+#
+# @param [PublisherItem] item The item to register
+SDP.Functional.addPublisherItem = (item) ->
+
+	return
+
+# Registers a Reviewer item
+#
+# @param [ReviewerItem] item The item to register
+SDP.Functional.addReviewerItem = (item) ->
+
+	return
+
+# Registers a Review Message item
+#
+# @param [ReviewMessageItem] item The item to register
+SDP.Functional.addReviewMessageItem = (item) ->
+
+	return
+
+# Adds a notification to the triggering queue
+#
+# @param [NotificationItem] item The item to queue
+SDP.Functional.addNotificationToQueue = (item) ->
 	item.header = '?' unless item.header?
 	item.text = '?' unless item.text?
 	if not item instanceof Notification
@@ -194,6 +298,81 @@ SDP.GDT.triggerNotification = (item) ->
 			sourceId: item.sourceId
 		}
 	if GameManager?.company?.notifications? then GameManager.company.notifications.push(item) else SDP.GDT.Internal.notificationsToTrigger.push(item)
+
+SDP.Class = (
+	classes = {}
+
+	class classes.Research
+
+	class classes.Platform
+
+		constructor: (@name, @companyId, @id = @name) ->
+
+
+	class classes.Topic
+		BASE_OVERRIDE = [0,0,0,0,0,0,0,0,0]
+
+		constructor: (@name, @id = @name) ->
+			if @name.constructor is Object
+				@id = @name.id
+				@audienceWeight = new SDP.Util.Weight(@name.audienceWeight)
+				@genreWeight = new SDP.Util.Weight(@name.genreWeight)
+				@overrides = @name.overrides or @name.missionOverrides
+				@name = @name.name
+			else
+				@audienceWeight = new SDP.Util.Weight(true)
+				@genreWeight = new SDP.Util.Weight(false)
+				@overrides = [BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE]
+
+		setOverride: (genreName, catName, value) ->
+			if SDP.Util.isArry(genreName)
+				@overrides = genreName
+				return @
+			if SDP.Util.isArray(catName) then value = catName
+			catOrNull = if value isnt catName and (SDP.Util.isString(catName) or SDP.Util.isInteger(catName)) then catName else null
+			positions = SDP.Util.getOverridePositions(genreName, catOrNull)
+			if value is catName
+				@overrides[positions[0]] = value
+			else
+				@overrides[positions[0]][positions[1]] = value
+			@
+
+		convert: ->
+			{
+				name: @name
+				id: @id
+				genreWeight: @genreWeight
+				audienceWeight: @audienceWeight
+				overrides: @overrides
+			}
+
+	class classes.ResearchProject
+
+	class classes.Training
+
+	class classes.Contract
+
+	class classes.Publisher
+
+	class classes.Reviewer
+
+	class classes.ReviewMessage
+
+	class classes.Company
+		platforms = []
+
+		constructor: (name, id = name) ->
+			@getName = -> name
+			@getId = -> id
+			# companies should not allow internal modification after construction
+
+		addPlatform: (item) ->
+			item.companyId = @getId()
+			platforms.push(item)
+
+		getPlatform: (index) ->
+			platforms[index]
+)()
 
 SDP.GDT.addEvent = (item) ->
 	item = item.getEvent() if item.getEvent?
@@ -221,15 +400,7 @@ SDP.GDT.addCompany = (item) ->
 ###
 GDT Utility: Functions which are for utility of GDT
 ###
-SDP.GDT.getOverridePositions = (genre, category) ->
-	genre = genre.replace(/\s/g, "")
-	category = category.replace(/\s/g, "")
-	for g, i in SDP.Enum.Genre.toArray()
-		if genre is g
-			for c, ci in SDP.Enum.ResearchCategory.toArray()
-				if c is category then return [i, ci]
-			break
-	return undefined
+
 
 ###
 Adds company tracking system
@@ -336,7 +507,7 @@ SDP.Logger = ((s) ->
 
 	s
 )(SDP.Logger or {})
-	
+
 ###
 STORAGE
 ###
