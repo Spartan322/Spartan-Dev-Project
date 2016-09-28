@@ -122,8 +122,10 @@ jSTORAGE End
 "use strict";
 
 SDP.Util = (function() {
-  var util;
+  var fs, path, util;
   util = {};
+  fs = require('fs');
+  path = require('path');
   util.isString = function(obj) {
     return obj.constructor === String;
   };
@@ -145,6 +147,154 @@ SDP.Util = (function() {
   util.isBoolean = function(obj) {
     return obj === true || obj === false;
   };
+  util.Filesystem = (function() {
+    var fsys;
+    fsys = {};
+    fsys.Constants = {
+      filesystem: 'posix'
+    };
+    fsys.path = path[fsys.Constants.filesystem];
+    fsys.cwd = function() {
+      return fsys.path.resolve(process.cwd());
+    };
+    fsys.walk = function(dir, finish) {
+      var results;
+      results = [];
+      return fs.readdir(p.get(), function(err, files) {
+        var pending;
+        if (err) {
+          return finsh(err);
+        }
+        pending = files.length;
+        if (!pending) {
+          return finish(null, results);
+        }
+        return files.forEach(function(file) {
+          file = fsys.path.resolve(dir, file);
+          return fs.stat(file, function(err, stat) {
+            if (stat && stat.isDirectory()) {
+              return walk(file, function(err, res) {
+                results = results.concat(res);
+                if (!--pending) {
+                  return finish(null, results);
+                }
+              });
+            } else {
+              results.push(file);
+              if (!--pending) {
+                return finish(null, results);
+              }
+            }
+          });
+        });
+      });
+    };
+    fsys.readJSONFile = function(p) {
+      var result;
+      if (p.constructor !== util.Path) {
+        p = new fsys.Path(path);
+      }
+      if (p.isDirectory) {
+        throw "Error: SDP.Util.Filesystem.readJSONFile can not operate on directories";
+      }
+      if (p.extname() !== '.json') {
+        throw "Error: SDP.Util.Filesystem.readJSONFile only operates on JSON files";
+      }
+      result = null;
+      fs.readFile(p.get(), function(err, data) {
+        if (err) {
+          throw err;
+        }
+        return result = JSON.parse(data);
+      });
+      return result;
+    };
+    fsys.readJSONDirectory = function(p) {
+      if (p.constructor !== util.Path) {
+        p = new fsys.Path(path);
+      }
+      if (!p.isDirectory()) {
+        throw "Error: SDP.Util.Filesystem.readJSONDirectory can not operate on just files";
+      }
+      return fsys.walk(p.get(), function(err, files) {
+        var results;
+        if (err) {
+          throw err;
+        }
+        results = [];
+        files.forEach(function(file) {
+          var pa;
+          pa = new fsys.Path(file);
+          if (pa.extname() === '.json') {
+            return results.push(fsys.readJSONFile(pa));
+          }
+        });
+        return results;
+      });
+    };
+    fsys.Path = (function() {
+      function Path(uri) {
+        if (util.isObject(uri)) {
+          uri = fsys.path.format(uri);
+        }
+        if (uri === void 0) {
+          uri = fsys.cwd();
+        }
+        fsys.Path.check(uri);
+        this.get = function() {
+          fsys.Path.check(uri);
+          return uri;
+        };
+      }
+
+      Path.check = function(uri) {
+        if (fsys.path.isAbsolute(uri)) {
+          throw "Error: SDP may not store absolute paths";
+        }
+        if (!fsys.path.resolve(uri).startsWith(fsys.cwd())) {
+          throw "Error: SDP may not leave the current working directory";
+        }
+      };
+
+      Path.prototype.cd = function(to) {
+        var uri;
+        uri = fsys.path.resolve(this.get, to);
+        fsys.Path.check(uri);
+        return this.get = function() {
+          fsys.Path.check(uri);
+          return uri;
+        };
+      };
+
+      Path.prototype.basename = function(ext) {
+        return fsys.path.basename(this.get, ext);
+      };
+
+      Path.prototype.dirname = function() {
+        return fsys.path.dirname(this.get);
+      };
+
+      Path.prototype.extname = function() {
+        return fsys.path.extname(this.get);
+      };
+
+      Path.prototype.parse = function() {
+        return fsys.path.parse(this.get);
+      };
+
+      Path.prototype.isFile = function() {
+        return fs.lstatSync(this.get).isFile();
+      };
+
+      Path.prototype.isDirectory = function() {
+        return fs.lstatSync(this.get).isDirectory();
+      };
+
+      return Path;
+
+    })();
+    return fsys;
+  })();
   util.getOverridePositions = function(genre, category) {
     var c, ci, g, i, j, k, len, len1, ref, ref1;
     genre = genre.replace(/\s/g, "");
@@ -169,12 +319,18 @@ SDP.Util = (function() {
     return void 0;
   };
   util.Image = (function() {
-    function Image(uri) {
-      this.uri = uri;
+    function Image(uri1) {
+      this.uri = uri1;
+      if (!util.isString(this.uri)) {
+        this.uri = null;
+      }
     }
 
     Image.prototype.exists = function() {
       var doesExist;
+      if (this.uri === null) {
+        return false;
+      }
       doesExist = true;
       fs.access(this.uri, fs.constants.F_OK, function(err) {
         if (err) {
@@ -211,6 +367,15 @@ SDP.Util = (function() {
         this.arr = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8];
       } else {
         if (util.isArray(w1)) {
+          if (w1.length > 3) {
+            while (w1.length < 6) {
+              w1.push(w1.last());
+            }
+          } else {
+            while (w1.length < 3) {
+              w1.push(w1.last());
+            }
+          }
           this.arr = w1;
         } else {
           this.arr = [w1, w2, w3];
@@ -234,7 +399,58 @@ SDP.Util = (function() {
       };
     }
 
+    Weight.prototype.get = function(index) {
+      if (index === null) {
+        return this.arr;
+      }
+      return this.arr[index];
+    };
+
+    Weight.prototype.convert = function() {
+      return new Array(this.arr);
+    };
+
     return Weight;
+
+  })();
+  util.Date = (function() {
+    var END, START;
+
+    START = '1/1/1';
+
+    END = '260/12/4';
+
+    function Date(y, m, w) {
+      var ref, ref1, ref2, ref3;
+      if (y == null) {
+        y = 1;
+      }
+      if (util.isString(y)) {
+        ref = m.split('/'), y = ref[0], m = ref[1], w = ref[2];
+        if (util.isString(y)) {
+          ref1 = m.split(' '), y = ref1[0], m = ref1[1], w = ref1[2];
+        }
+      }
+      if (y === true) {
+        ref2 = END.split('/'), y = ref2[0], m = ref2[1], w = ref2[2];
+      }
+      if (y === false) {
+        ref3 = START.split('/'), y = ref3[0], m = ref3[1], w = ref3[2];
+      }
+      if (m === void 0) {
+        m = y;
+      }
+      if (w === void 0) {
+        w = m;
+      }
+      this.string = '#{y}/#{m}/#{w}';
+    }
+
+    Date.prototype.convert = function() {
+      return new String(this.string);
+    };
+
+    return Date;
 
   })();
   return util;
@@ -366,6 +582,15 @@ SDP.Class = (classes = {}, classes.Research = (function() {
     this.name = name1;
     this.companyId = companyId;
     this.id = id1 != null ? id1 : this.name;
+    this.startAmount = 0;
+    this.unitsSold = 0;
+    this.licensePrice = 0;
+    this.publishDate = new SDP.Util.Date(false);
+    this.retireDate = new SDP.Util.Date(true);
+    this.devCost = 0;
+    this.techLevel = 0;
+    this.iconUri = new SDP.Util.Filesystem.Path();
+    this.imageDates = [];
   }
 
   return Platform;

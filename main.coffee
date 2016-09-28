@@ -115,6 +115,8 @@ jSTORAGE End
 
 SDP.Util = (->
 	util = {}
+	fs = require('fs')
+	path = require('path')
 
 	util.isString = (obj) -> obj.constructor is String
 	util.isArray = (obj) -> obj.constructor is Array
@@ -123,6 +125,103 @@ SDP.Util = (->
 	util.isFloat = (obj) -> util.isNumber(obj) and not Number.isInteger(obj)
 	util.isObject = (obj) -> obj.constructor is Object
 	util.isBoolean = (obj) -> obj is true or obj is false
+
+	util.Filesystem = (->
+		fsys = {}
+		fsys.Constants = {
+			filesystem: 'posix'
+		}
+
+		fsys.path = path[fsys.Constants.filesystem]
+
+		fsys.cwd = -> fsys.path.resolve(process.cwd())
+
+		fsys.walk = (dir, finish) ->
+				results = []
+				fs.readdir(p.get(), (err, files) ->
+					if err then return finsh(err)
+					pending = files.length
+					if not pending then return finish(null, results)
+					files.forEach((file) ->
+						file = fsys.path.resolve(dir, file)
+						fs.stat(file, (err, stat) ->
+							if stat and stat.isDirectory() then walk(file, (err, res) ->
+								results = results.concat(res)
+								if not --pending then finish(null, results)
+							)
+							else
+								results.push(file)
+								if not --pending then return finish(null, results)
+						)
+					)
+				)
+
+		fsys.readJSONFile = (p) ->
+			if p.constructor isnt util.Path then p = new fsys.Path(path)
+			if p.isDirectory then throw "Error: SDP.Util.Filesystem.readJSONFile can not operate on directories"
+			if p.extname() isnt '.json' then throw "Error: SDP.Util.Filesystem.readJSONFile only operates on JSON files"
+			result = null
+			fs.readFile(p.get(), (err, data) ->
+				if err then throw err
+				result = JSON.parse(data)
+			)
+			result
+
+		fsys.readJSONDirectory = (p) ->
+			if p.constructor isnt util.Path then p = new fsys.Path(path)
+			if not p.isDirectory() then throw "Error: SDP.Util.Filesystem.readJSONDirectory can not operate on just files"
+			return fsys.walk(p.get(), (err, files) ->
+				if err then throw err
+				results = []
+				files.forEach((file) ->
+					pa = new fsys.Path(file)
+					if pa.extname() is '.json' then results.push(fsys.readJSONFile(pa))
+				)
+				results
+			)
+
+		# TODO: Add easy to use register json as mod stuff here
+
+		class fsys.Path
+			constructor: (uri) ->
+				if util.isObject(uri) then uri = fsys.path.format(uri)
+				if uri is undefined then uri = fsys.cwd()
+				fsys.Path.check(uri)
+				@get = ->
+					fsys.Path.check(uri)
+					uri
+
+			@check: (uri) ->
+				if fsys.path.isAbsolute(uri) then throw "Error: SDP may not store absolute paths"
+				if not fsys.path.resolve(uri).startsWith(fsys.cwd()) then throw "Error: SDP may not leave the current working directory"
+
+			cd: (to) ->
+				uri = fsys.path.resolve(@get, to)
+				fsys.Path.check(uri)
+				@get = ->
+					fsys.Path.check(uri)
+					uri
+
+			basename: (ext) ->
+				fsys.path.basename(@get, ext)
+
+			dirname: ->
+				fsys.path.dirname(@get)
+
+			extname: ->
+				fsys.path.extname(@get)
+
+			parse: ->
+				fsys.path.parse(@get)
+
+			isFile: ->
+				fs.lstatSync(@get).isFile()
+
+			isDirectory: ->
+				fs.lstatSync(@get).isDirectory()
+
+		fsys
+	)()
 
 	util.getOverridePositions = (genre, category) ->
 		genre = genre.replace(/\s/g, "")
@@ -136,9 +235,11 @@ SDP.Util = (->
 		return undefined
 
 	class util.Image
-		constructor: (@uri)->
+		constructor: (@uri) ->
+			@uri = null if not util.isString(@uri)
 
 		exists: ->
+			if @uri is null then return false
 			doesExist = true
 			fs.access(@uri, fs.constants.F_OK, (err) ->
 				if err then doesExist = false
@@ -150,13 +251,42 @@ SDP.Util = (->
 			if w1 is true or (not util.isNumber(w1) and not util.isArray(w1)) then @arr = [0.8,0.8,0.8]
 			else if w1 is false then @arr = [0.8,0.8,0.8,0.8,0.8,0.8]
 			else
-				if util.isArray(w1) then @arr = w1
+				if util.isArray(w1)
+					if w1.length > 3
+						w1.push(w1.last()) while w1.length < 6
+					else
+						w1.push(w1.last()) while w1.length < 3
+					@arr = w1
 				else
 					@arr = [w1,w2,w3]
 					if w4 then @arr.push(w4,w5,w6)
 				@arr[i] = num/100 for num, i in @arr when num > 1
 			@isGenre = -> @arr.length is 6
 			@isAudience = -> @arr.length is 3
+
+		get: (index) ->
+			if index is null then return @arr
+			@arr[index]
+
+		convert: ->
+			new Array(@arr)
+
+	class util.Date
+		START = '1/1/1'
+		END = '260/12/4'
+
+		constructor: (y = 1, m, w) ->
+			if util.isString(y)
+				[y,m,w] = m.split('/')
+				if util.isString(y) then [y,m,w] = m.split(' ')
+			if y is true then [y,m,w] = END.split('/')
+			if y is false then [y,m,w] = START.split('/')
+			if m is undefined then m = y
+			if w is undefined then w = m
+			@string = '#{y}/#{m}/#{w}'
+
+		convert: ->
+			new String(@string)
 
 	util
 )()
@@ -307,6 +437,15 @@ SDP.Class = (
 	class classes.Platform
 
 		constructor: (@name, @companyId, @id = @name) ->
+			@startAmount = 0
+			@unitsSold = 0
+			@licensePrice = 0
+			@publishDate = new SDP.Util.Date(false)
+			@retireDate = new SDP.Util.Date(true)
+			@devCost = 0
+			@techLevel = 0
+			@iconUri = new SDP.Util.Filesystem.Path()
+			@imageDates = []
 
 
 	class classes.Topic
