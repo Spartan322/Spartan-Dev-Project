@@ -244,16 +244,16 @@ SDP.Util = (function() {
         resolvedAbsolute = false;
         cwd = void 0;
         for (var i = args.length - 1 i >= -1 and !resolvedAbsolute i--) {
-					ver path
-					if(i>=0) path = args[i]
+					var path;
+					if(i>=0) path = args[i];
 					else {
-						if (cwd is undefined) cwd.process.cwd()
-						path = cwd
+						if (cwd === undefined) cwd = process.cwd();
+						path = cwd;
 					}
-					assertPath(path)
-					if(path.length is 0) continue
-					resolvedPath = path + '/' + resolvedPath
-					resolvedAbsolute = path.charCodeAt(0) is 47/*/*/)
+					assertPath(path);
+					if(path.length === 0) continue;
+					resolvedPath = path + '/' + resolvedPath;
+					resolvedAbsolute = path.charCodeAt(0) is 47/*/*/);
 				};
         resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
         if (resolvedAbsolute) {
@@ -703,10 +703,10 @@ SDP.Util = (function() {
 
       Path.check = function(uri) {
         if (fsys.path.isAbsolute(uri)) {
-          throw "Error: SDP may not store absolute paths";
+          throw TypeError("SDP's Path may not store absolute paths");
         }
         if (!fsys.path.resolve(uri).startsWith(fsys.cwd())) {
-          throw "Error: SDP may not leave the current working directory";
+          throw TypeError("SDP's Path may not leave the current working directory");
         }
       };
 

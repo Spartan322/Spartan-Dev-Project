@@ -18,8 +18,11 @@ This API is not complete, nor is it likely not to create problems or conflicts, 
 
 ### Contribution Setup
 In order to develop for this project, you must have coffeescript installed and readily available on your computer:
+
 1. Install npm ([Node.js](https://nodejs.org/en/) recommended)
+
 2. After installing npm, install coffeescript using 'npm install -g coffee-script' (if you prefer a local installation, you must manage outputting to js manually)
+
 3. With the global install, open your terminal/cmd, go to this directory, and type 'output'
 
 
