@@ -215,6 +215,20 @@ SDP.Util = (function() {
   util.isBoolean = function(obj) {
     return obj === true || obj === false;
   };
+  util.isFunction = function(obj) {
+    return obj.constructor === Function;
+  };
+  String.prototype.capitalize = function(index) {
+    var halfResult;
+    if (index == null) {
+      index = 0;
+    }
+    halfResult = this.charAt(index).toUpperCase() + this.slice(index + 1);
+    if (halfResult.length === this.length) {
+      return halfResult;
+    }
+    return this.slice(0, index) + halfResult;
+  };
   util.Filesystem = (function() {
     var _format, assertPath, fsys, inspect;
     fsys = {};
@@ -243,7 +257,7 @@ SDP.Util = (function() {
         resolvedPath = '';
         resolvedAbsolute = false;
         cwd = void 0;
-        for (var i = args.length - 1 i >= -1 and !resolvedAbsolute i--) {
+        for (var i = args.length - 1 i >= -1 && !resolvedAbsolute i--) {
 					var path;
 					if(i>=0) path = args[i];
 					else {
@@ -648,11 +662,11 @@ SDP.Util = (function() {
       if (p.constructor !== util.Path) {
         p = new fsys.Path(path);
       }
-      if (p.isDirectory) {
-        throw "Error: SDP.Util.Filesystem.readJSONFile can not operate on directories";
+      if (p.isDirectory()) {
+        throw new TypeError("SDP.Util.Filesystem.readJSONFile can not operate on directories");
       }
       if (p.extname() !== '.json') {
-        throw "Error: SDP.Util.Filesystem.readJSONFile only operates on JSON files";
+        throw new TypeError("SDP.Util.Filesystem.readJSONFile only operates on JSON files");
       }
       result = null;
       fs.readFile(p.get(), function(err, data) {
@@ -663,12 +677,12 @@ SDP.Util = (function() {
       });
       return result;
     };
-    fsys.readJSONDirectory = function(p) {
+    fsys.readJSONDirectory = function(p, callback) {
       if (p.constructor !== util.Path) {
         p = new fsys.Path(path);
       }
       if (!p.isDirectory()) {
-        throw "Error: SDP.Util.Filesystem.readJSONDirectory can not operate on just files";
+        throw new TypeError("SDP.Util.Filesystem.readJSONDirectory can not operate on just files");
       }
       return fsys.walk(p.get(), function(err, files) {
         var results;
@@ -677,13 +691,40 @@ SDP.Util = (function() {
         }
         results = [];
         files.forEach(function(file) {
-          var pa;
+          var json, pa;
           pa = new fsys.Path(file);
+          json = fsys.readJSONFile(pa);
           if (pa.extname() === '.json') {
-            return results.push(fsys.readJSONFile(pa));
+            results.push(json);
+          }
+          if (util.isFunction(callback)) {
+            return callback(json);
           }
         });
         return results;
+      });
+    };
+    fsys.registerJSONFile = function(p) {
+      if (p.constructor !== util.Path) {
+        p = new fsys.Path(path);
+      }
+      if (p.isDirectory()) {
+        throw new TypeError("SDP.Util.Filesystem.registerJSONFile can not operate on directories");
+      }
+      if (p.extname() !== '.json') {
+        throw new TypeError("SDP.Util.Filesystem.registerJSONFile only operates on JSON files");
+      }
+      return util.registerJSONObject(fsys.readJSONFile(p));
+    };
+    fsys.registerJSONDirectory = function(p) {
+      if (p.constructor !== util.Path) {
+        p = new fsys.Path(path);
+      }
+      if (!p.isDirectory()) {
+        throw new TypeError("SDP.Util.Filesystem.registerJSONDirectory can only operate on directories");
+      }
+      return fsys.readJSONDirectory(p, function(json) {
+        return util.registerJSONObject(json);
       });
     };
     fsys.Path = (function() {
@@ -703,10 +744,10 @@ SDP.Util = (function() {
 
       Path.check = function(uri) {
         if (fsys.path.isAbsolute(uri)) {
-          throw TypeError("SDP's Path may not store absolute paths");
+          throw new TypeError("SDP's Path may not store absolute paths");
         }
         if (!fsys.path.resolve(uri).startsWith(fsys.cwd())) {
-          throw TypeError("SDP's Path may not leave the current working directory");
+          throw new TypeError("SDP's Path may not leave the current working directory");
         }
       };
 
@@ -749,6 +790,18 @@ SDP.Util = (function() {
     })();
     return fsys;
   })();
+  util.registerJSONObject = function(item) {
+    var func;
+    if (!util.isString(item.objectType)) {
+      throw new TypeError("SDP.Util.registerJSONObject can not work on items that don't contain an objectType field");
+    }
+    func = SDP.Functional['add#{item.objectType.capitalize()}Item'];
+    if (!func) {
+      alert("SDP.Util.registerJSONObject could not find the function for objectType " + item.objectType);
+      return;
+    }
+    return func(item);
+  };
   util.getOverridePositions = function(genre, category) {
     var c, ci, g, i, k, l, len, len1, ref, ref1;
     genre = genre.replace(/\s/g, "");
@@ -931,7 +984,7 @@ SDP.Functional.addResearchItem = function(item) {
   }
 };
 
-SDP.Functional.addPlatform = function(item) {
+SDP.Functional.addPlatformItem = function(item) {
   var event, k, len, point, ref;
   if ((SDP.GDT.Platform != null) && item instanceof SDP.GDT.Platform) {
     item = item.toInput();
@@ -963,7 +1016,7 @@ SDP.Functional.addPlatform = function(item) {
   }
 };
 
-SDP.Functional.addTopic = function(item) {
+SDP.Functional.addTopicItem = function(item) {
   if ((SDP.GDT.Topic != null) && item instanceof SDP.GDT.Topic) {
     item = item.toInput();
   }
@@ -976,7 +1029,7 @@ SDP.Functional.addTopic = function(item) {
   return GDT.addTopic(item);
 };
 
-SDP.Functional.addResearchProject = function(item) {
+SDP.Functional.addResearchProjectItem = function(item) {
   if ((SDP.GDT.ResearchProject != null) && item instanceof SDP.GDT.ResearchProject) {
     item = item.toInput();
   }
@@ -988,6 +1041,10 @@ SDP.Functional.addResearchProject = function(item) {
   if (Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) && Checks.checkUniqueness(item, 'id', Research.bigProjects)) {
     Research.bigProjects.push(item);
   }
+};
+
+SDP.Functional.addResearchProject = function(item) {
+  return SDP.Functional.addResearchProjectItem(item);
 };
 
 SDP.Functional.addTrainingItem = function(item) {};

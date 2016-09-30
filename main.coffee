@@ -167,6 +167,12 @@ SDP.Util = (->
 	util.isFloat = (obj) -> util.isNumber(obj) and not Number.isInteger(obj)
 	util.isObject = (obj) -> obj.constructor is Object
 	util.isBoolean = (obj) -> obj is true or obj is false
+	util.isFunction = (obj) -> obj.constructor is Function
+
+	String.prototype.capitalize = (index = 0) ->
+		halfResult = @charAt(index).toUpperCase() + @slice(index+1)
+		if halfResult.length is @length then return halfResult
+		@slice(0, index) + halfResult
 
 	util.Filesystem = (->
 		fsys = {}
@@ -188,7 +194,7 @@ SDP.Util = (->
 				resolvedPath = ''
 				resolvedAbsolute = false
 				cwd = undefined
-				`for (var i = args.length - 1 i >= -1 and !resolvedAbsolute i--) {
+				`for (var i = args.length - 1 i >= -1 && !resolvedAbsolute i--) {
 					var path;
 					if(i>=0) path = args[i];
 					else {
@@ -441,8 +447,8 @@ SDP.Util = (->
 
 		fsys.readJSONFile = (p) ->
 			if p.constructor isnt util.Path then p = new fsys.Path(path)
-			if p.isDirectory then throw "Error: SDP.Util.Filesystem.readJSONFile can not operate on directories"
-			if p.extname() isnt '.json' then throw "Error: SDP.Util.Filesystem.readJSONFile only operates on JSON files"
+			if p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.readJSONFile can not operate on directories")
+			if p.extname() isnt '.json' then throw new TypeError("SDP.Util.Filesystem.readJSONFile only operates on JSON files")
 			result = null
 			fs.readFile(p.get(), (err, data) ->
 				if err then throw err
@@ -450,20 +456,31 @@ SDP.Util = (->
 			)
 			result
 
-		fsys.readJSONDirectory = (p) ->
+		fsys.readJSONDirectory = (p, callback) ->
 			if p.constructor isnt util.Path then p = new fsys.Path(path)
-			if not p.isDirectory() then throw "Error: SDP.Util.Filesystem.readJSONDirectory can not operate on just files"
+			if not p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.readJSONDirectory can not operate on just files")
 			return fsys.walk(p.get(), (err, files) ->
 				if err then throw err
 				results = []
 				files.forEach((file) ->
 					pa = new fsys.Path(file)
-					if pa.extname() is '.json' then results.push(fsys.readJSONFile(pa))
+					json = fsys.readJSONFile(pa)
+					if pa.extname() is '.json' then results.push(json)
+					if util.isFunction(callback) then callback(json)
 				)
 				results
 			)
 
-		# TODO: Add easy to use register json as mod stuff here
+		fsys.registerJSONFile = (p) ->
+			if p.constructor isnt util.Path then p = new fsys.Path(path)
+			if p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.registerJSONFile can not operate on directories")
+			if p.extname() isnt '.json' then throw new TypeError("SDP.Util.Filesystem.registerJSONFile only operates on JSON files")
+			return util.registerJSONObject(fsys.readJSONFile(p))
+
+		fsys.registerJSONDirectory = (p) ->
+			if p.constructor isnt util.Path then p = new fsys.Path(path)
+			if not p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.registerJSONDirectory can only operate on directories")
+			fsys.readJSONDirectory(p, (json) -> util.registerJSONObject(json))
 
 		class fsys.Path
 			constructor: (uri) ->
@@ -475,8 +492,8 @@ SDP.Util = (->
 					uri
 
 			@check: (uri) ->
-				if fsys.path.isAbsolute(uri) then throw TypeError("SDP's Path may not store absolute paths")
-				if not fsys.path.resolve(uri).startsWith(fsys.cwd()) then throw TypeError("SDP's Path may not leave the current working directory")
+				if fsys.path.isAbsolute(uri) then throw new TypeError("SDP's Path may not store absolute paths")
+				if not fsys.path.resolve(uri).startsWith(fsys.cwd()) then throw new TypeError("SDP's Path may not leave the current working directory")
 
 			cd: (to) ->
 				uri = fsys.path.resolve(@get, to)
@@ -505,6 +522,15 @@ SDP.Util = (->
 
 		fsys
 	)()
+
+	util.registerJSONObject = (item) ->
+		if not util.isString(item.objectType) then throw new TypeError("SDP.Util.registerJSONObject can not work on items that don't contain an objectType field")
+		func = SDP.Functional['add#{item.objectType.capitalize()}Item']
+		if not func
+			alert("SDP.Util.registerJSONObject could not find the function for objectType #{item.objectType}")
+			return
+		func(item)
+
 
 	util.getOverridePositions = (genre, category) ->
 		genre = genre.replace(/\s/g, "")
@@ -627,7 +653,7 @@ SDP.Functional.addResearchItem = (item) ->
 # Registers a Platform item
 #
 # @param [PlatformItem] item The item to register
-SDP.Functional.addPlatform = (item) ->
+SDP.Functional.addPlatformItem = (item) ->
 	item = item.toInput() if SDP.GDT.Platform? and item instanceof SDP.GDT.Platform
 	if item.iconUri? then GDT.addPlatform(item) else
 		if Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) and Checks.checkAudienceWeightings(item.audienceWeightings) and Checks.checkGenreWeightings(item.genreWeightings) and Checks.checkDate(item.published) and Checks.checkDate(item.platformRetireDate)
@@ -643,7 +669,7 @@ SDP.Functional.addPlatform = (item) ->
 # Registers a Topic item
 #
 # @param [TopicItem] item The item to register
-SDP.Functional.addTopic = (item) ->
+SDP.Functional.addTopicItem = (item) ->
 	item = item.toInput() if SDP.GDT.Topic? and item instanceof SDP.GDT.Topic
 	item.genreWeightings = item.genreWeightings.toGenre().get() if SDP.GDT.Weight? and item.genreWeightings instanceof SDP.GDT.Weight
 	item.audienceWeightings = item.audienceWeightings.toAudience().get() if SDP.GDT.Weight? and item.audienceWeightings instanceof SDP.GDT.Weight
@@ -652,12 +678,14 @@ SDP.Functional.addTopic = (item) ->
 # Registers a Research Project item
 #
 # @param [ResearchProjectItem] item The item to register
-SDP.Functional.addResearchProject = (item) ->
+SDP.Functional.addResearchProjectItem = (item) ->
 	item = item.toInput() if SDP.GDT.ResearchProject? and item instanceof SDP.GDT.ResearchProject
 	item.canResearch = ((company)->true) unless item.canResearch?
 	if Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) and Checks.checkUniqueness(item, 'id', Research.bigProjects)
 		Research.bigProjects.push(item)
 	return
+
+SDP.Functional.addResearchProject = (item) -> SDP.Functional.addResearchProjectItem(item)
 
 # Registers a Training item
 #
