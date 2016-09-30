@@ -2254,57 +2254,19 @@ Reviews.getReviews = function(game, finalScore, positiveMessages, negativeMessag
 
 
 /*
-Forces all games to contain the company
+Appends company field to Game object
  */
 
-Game = (function(superClass) {
-	var __extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; }
-	__extend(Game, superClass);
-
-	function Game(company) {
-		this.id = GameManager.getGUID();
-		this.title = void 0;
-		this.genre = void 0;
-		this.topic = void 0;
-		this.platforms = [];
-		this.engine = void 0;
-		this.state = GameState.notStarted;
-		this.gameSize = "small";
-		this.targetAudience = "everyone";
-		this.missionLog = [];
-		this.salesCashLog = [];
-		this.featureLog = null;
-		this.score = 0;
-		this.reviews = [];
-		this.costs = 0;
-		this.hypePoints = 0;
-		this.technologyPoints = 0;
-		this.bugs = 0;
-		this.freeBugCount = 0;
-		this.designPoints = 0;
-		this.currentSalesCash = 0;
-		this.totalSalesCash = 0;
-		this.amountSold = 0;
-		this.releaseWeek = 0;
-		this.fansChangeTarget = 0;
-		this.fansChanged = 0;
-		this.initialSalesRank = 0;
-		this.currentSalesRank = 0;
-		this.topSalesRank = 0;
-		this.researchFactor = 1;
-		this.revenue = 0;
-		this.flags = {};
-		this.soldOut = false;
-		this.company = company;
-		if (company.conferenceHype) {
-		  this.hypePoints = company.conferenceHype;
-		  company.conferenceHype = Math.floor(company.conferenceHype / 3);
-		}
-	}
-
-	return Game;
-
-})(Game);
+(function() {
+  var Game, oldGame, oldGameConstructor;
+  oldGame = Game.prototype;
+  oldGameConstructor = Game;
+  Game = function(company) {
+    oldGameConstructor.call(this, company);
+    this.company = company;
+  };
+  return Game.prototype = oldGame;
+})();
 
 
 /*
