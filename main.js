@@ -83,8 +83,8 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
  */
 var Companies, JobApplicants, SDP, __notificationRep, classes,
-  bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-  slice = [].slice;
+  slice = [].slice,
+  bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
 SDP = {};
 
@@ -122,10 +122,78 @@ jSTORAGE End
 "use strict";
 
 SDP.Util = (function() {
-  var fs, path, util;
+  var fs, normalizeStringPosix, path, util;
   util = {};
   fs = require('fs');
   path = require('path');
+  normalizeStringPosix = function(path, allowAboveRoot) {
+    var code, dots, i, j, k, l, lastSlash, ref, ref1, res, start;
+    res = '';
+    lastSlash = -1;
+    dots = 0;
+    code = void 0;
+    for (i = k = 0, ref = path.length; 0 <= ref ? k <= ref : k >= ref; i = 0 <= ref ? ++k : --k) {
+      if (i < path.length) {
+        code = path.charCodeAt(i);
+      } else if (code === 47) {
+        break;
+      } else {
+        code = 47;
+      }
+      if (code === 47) {
+        if (lastSlash === i - 1 || dots === 1) {
+
+        } else if (lastSlash !== i - 1 && dots === 2) {
+          if (res.length < 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
+            if (res.length > 2) {
+              start = res.length - 1;
+              j = start;
+              for (j = l = ref1 = start; ref1 <= 0 ? l <= 0 : l >= 0; j = ref1 <= 0 ? ++l : --l) {
+                if (res.charCodeAt(j) === 47) {
+                  break;
+                }
+              }
+              if (j !== start) {
+                if (j === -1) {
+                  res = '';
+                } else {
+                  res = res.slice(0, j);
+                }
+              }
+              lastSlash = i;
+              dots = 0;
+              continue;
+            }
+          } else if (res.length === 2 || res.length === 1) {
+            res = '';
+            lastSlash = i;
+            dots = 0;
+            continue;
+          }
+        }
+        if (allowAboveRoot) {
+          if (res.length > 0) {
+            res += '/..';
+          } else {
+            res = '..';
+          }
+        } else {
+          if (res.length > 0) {
+            res += '/' + path.slice(lastSlash + 1, i);
+          } else {
+            res = path.slice(lastSlash + 1, i);
+          }
+        }
+        lastSlash = i;
+        dots = 0;
+      } else if (code === 46 && dots !== -1) {
+        ++dots;
+      } else {
+        dots = -1;
+      }
+    }
+    return res;
+  };
   util.isString = function(obj) {
     return obj.constructor === String;
   };
@@ -148,12 +216,398 @@ SDP.Util = (function() {
     return obj === true || obj === false;
   };
   util.Filesystem = (function() {
-    var fsys;
+    var _format, assertPath, fsys, inspect;
     fsys = {};
-    fsys.Constants = {
-      filesystem: 'posix'
+    inspect = require('util').inspect;
+    assertPath = function(path) {
+      if (typeof path !== 'string') {
+        throw new TypeError('Path must be a string. Received ' + inspect(path));
+      }
     };
-    fsys.path = path[fsys.Constants.filesystem];
+    _format = function(sep, pathObject) {
+      var base, dir;
+      dir = pathObject.dir || pathObject.root;
+      base = pathObject.base || ((pathObject.name || '') + (pathObject.ext || ''));
+      if (!dir) {
+        return base;
+      }
+      if (dir === pathObject.root) {
+        return dir + base;
+      }
+      return dir + sep + base;
+    };
+    fsys.path = {
+      resolve: function() {
+        var args, cwd, resolvedAbsolute, resolvedPath;
+        args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+        resolvedPath = '';
+        resolvedAbsolute = false;
+        cwd = void 0;
+        for (var i = args.length - 1 i >= -1 and !resolvedAbsolute i--) {
+					ver path
+					if(i>=0) path = args[i]
+					else {
+						if (cwd is undefined) cwd.process.cwd()
+						path = cwd
+					}
+					assertPath(path)
+					if(path.length is 0) continue
+					resolvedPath = path + '/' + resolvedPath
+					resolvedAbsolute = path.charCodeAt(0) is 47/*/*/)
+				};
+        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
+        if (resolvedAbsolute) {
+          if (resolvedPath.length > 0) {
+            return '/#{resolvedPath}';
+          } else {
+            return '/';
+          }
+        } else if (resolvedPath.length > 0) {
+          return resolvedPath;
+        } else {
+          return '.';
+        }
+      },
+      normalize: function(path) {
+        assertPath(path);
+        if (path.length === 0) {
+          return '.';
+        }
+        const isAbsolute = path.charCodeAt(0) is 47/*/*/;
+				const trailingSeparator = path.charCodeAt(path.length - 1) is 47/*/*/;
+        path = normalizeStringPosix(path, !isAbsolute);
+        if (path.length === 0 && !isAbsolute) {
+          path = '.';
+        }
+        if (path.length === 0 && trailingSeparator) {
+          path += '/';
+        }
+        if (isAbsolute) {
+          return '/#{path}';
+        }
+        return path;
+      },
+      isAbsolute: function(path) {
+        assertPath(path);
+        return path.length > 0 && path.charCodeAt(0) === 47;
+      },
+      join: function() {
+        var arg, args, i, joined, k, len;
+        args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+        if (args.length === 0) {
+          return '.';
+        }
+        joined = void 0;
+        for (arg = k = 0, len = args.length; k < len; arg = ++k) {
+          i = args[arg];
+          assertPath(arg);
+          if (joined === void 0) {
+            joined = arg;
+          } else {
+            joined += '#{joined}/#{arg}';
+          }
+        }
+        if (joined === void 0) {
+          return '.';
+        }
+        return fsys.path.normalize(joined);
+      },
+      relative: function(from, to) {
+        var fromCode, fromEnd, fromLen, fromStart, i, k, l, lastCommonSep, length, o, out, ref, ref1, ref2, ref3, ref4, ref5, ref6, ref7, toCode, toEnd, toLen, toStart, u;
+        assertPath(from);
+        assertPath(to);
+        if (from === to) {
+          return '';
+        }
+        from = fsys.path.resolve(from);
+        to = fsys.path.resolve(to);
+        if (from === to) {
+          return '';
+        }
+        fromStart = 1;
+        for (fromStart = k = ref = fromStart, ref1 = from.length; ref <= ref1 ? k <= ref1 : k >= ref1; fromStart = ref <= ref1 ? ++k : --k) {
+          if (from.charCodeAt(fromStart) !== 47) {
+            break;
+          }
+        }
+        fromEnd = from.length;
+        fromLen = fromEnd - fromStart;
+        toStart = 1;
+        for (toStart = l = ref2 = toStart, ref3 = to.length; ref2 <= ref3 ? l <= ref3 : l >= ref3; toStart = ref2 <= ref3 ? ++l : --l) {
+          if (to.charCodeAt(toStart) !== 47) {
+            break;
+          }
+        }
+        toEnd = to.length;
+        toLen = toEnd - toStart;
+        length = fromLen < toLen ? fromLen : toLen;
+        lastCommonSep = -1;
+        i = 0;
+        for (i = o = ref4 = i, ref5 = length; ref4 <= ref5 ? o <= ref5 : o >= ref5; i = ref4 <= ref5 ? ++o : --o) {
+          if (i === length) {
+            if (toLen > length) {
+              if (to.charCodeAt(toStart + i) === 47) {
+                return to.slice(toStart + i + 1);
+              } else if (i === 0) {
+                to.slice(toStart + i);
+              }
+            } else if (fromLen > length) {
+              if (from.charCodeAt(fromStart + i) === 47) {
+                lastCommonSep = i;
+              } else if (i === 0) {
+                lastCommonSep = 0;
+              }
+            }
+            break;
+          }
+          fromCode = from.charCodeAt(fromStart + i);
+          toCode = to.charCodeAt(toStart + i);
+          if (fromCode !== toCode) {
+            break;
+          } else if (fromCode === 47) {
+            lastCommonSep = i;
+          }
+        }
+        out = '';
+        for (i = u = ref6 = fromStart + lastCommonSep + 1, ref7 = fromEnd; ref6 <= ref7 ? u <= ref7 : u >= ref7; i = ref6 <= ref7 ? ++u : --u) {
+          if (i === fromEnd || from.charCodeAt(i) === 47) {
+            if (out.length === 0) {
+              out += '..';
+            } else {
+              out += '/..';
+            }
+          }
+        }
+        if (out.length > 0) {
+          return out + to.slice(toStart + lastCommonSep);
+        } else {
+          toStart += lastCommonSep;
+          if (to.charCodeAt(toStart) === 47) {
+            ++toStart;
+          }
+          return to.slice(toStart);
+        }
+      },
+      dirname: function(path) {
+        var code, end, hasRoot, i, k, matchedSlash, ref;
+        assertPath(path);
+        if (path.length === 0) {
+          return '.';
+        }
+        code = path.charCodeAt(0);
+        hasRoot = code === 47;
+        end = -1;
+        matchedSlash = true;
+        for (i = k = ref = path.length - 1; ref <= 1 ? k <= 1 : k >= 1; i = ref <= 1 ? ++k : --k) {
+          code = path.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              end = i;
+              break;
+            } else {
+              matchedSlash = false;
+            }
+          }
+        }
+        if (end === -1) {
+          if (hasRoot) {
+            return '/';
+          }
+        } else {
+          '.';
+        }
+        if (hasRoot && end === 1) {
+          return '//';
+        }
+        return path.slice(0, end);
+      },
+      basename: function(path, ext) {
+        var code, end, extIdx, firstNonSlashEnd, i, k, l, matchedSlash, ref, ref1, start;
+        if (ext !== void 0 && typeof ext !== 'string') {
+          throw new TypeError('"ext" argument must be a string');
+        }
+        assertPath(path);
+        start = 0;
+        end = -1;
+        matchedSlash = true;
+        i = void 0;
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path.length) {
+          if (ext.length === path.length && ext === path) {
+            return '';
+          }
+          extIdx = ext.length - 1;
+          firstNonSlashEnd = -1;
+          for (i = k = ref = path.length - 1; ref <= 0 ? k <= 0 : k >= 0; i = ref <= 0 ? ++k : --k) {
+            code = path.charCodeAt(i);
+            if (code === 47) {
+              if (!matchedSlash) {
+                start = i + 1;
+                break;
+              }
+            } else {
+              if (firstNonSlashEnd === -1) {
+                matchedSlash = false;
+                firstNonSlashEnd = i + 1;
+              }
+              if (extIdx >= 0) {
+                if (code === ext.charCodeAt(extIdx)) {
+                  if (--extIdx === -1) {
+                    end = i;
+                  }
+                }
+              } else {
+                extIdx = -1;
+                end = firstNonSlashEnd;
+              }
+            }
+          }
+          if (start === end) {
+            end = firstNonSlashEnd;
+          } else if (end === -1) {
+            end = path.length;
+          }
+          return path.slice(start, end);
+        } else {
+          for (i = l = ref1 = path.length - 1; ref1 <= 0 ? l <= 0 : l >= 0; i = ref1 <= 0 ? ++l : --l) {
+            if (path.charCodeAt(i) === 47) {
+              if (!matchedSlash) {
+                start = i + 1;
+                break;
+              }
+            } else if (end === -1) {
+              matchedSlash = false;
+              end = i + 1;
+            }
+          }
+          if (end === -1) {
+            return '';
+          }
+          return path.slice(start, end);
+        }
+      },
+      extname: function(path) {
+        var code, end, i, k, matchedSlash, preDotState, ref, startDot, startPart;
+        assertPath(path);
+        startDot = -1;
+        startPart = 0;
+        end = -1;
+        matchedSlash = true;
+        preDotState = 0;
+        for (i = k = ref = path.length - 1; ref <= 0 ? k <= 0 : k >= 0; i = ref <= 0 ? ++k : --k) {
+          code = path.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              startPart = i + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i + 1;
+          }
+          if (code === 46) {
+            if (startDot === -1) {
+              startDot = i;
+            } else if (preDotState !== 1) {
+              preDotState = 1;
+            }
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || preDotState === 0 || (preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)) {
+          return '';
+        }
+        return path.slice(startDot, end);
+      },
+      format: function(pathObject) {
+        if (pathObject === null || typeof pathObject !== 'object') {
+          throw new TypeError('Parameter "pathObject" must be an object, not #{typeof pathObject}');
+        }
+        return _format('/', pathObject);
+      },
+      parse: function(path) {
+        var code, end, i, isAbsolute, k, matchedSlash, preDotState, ref, ref1, ret, start, startDot, startPart;
+        assertPath(path);
+        ret = {
+          root: '',
+          dir: '',
+          base: '',
+          ext: '',
+          name: ''
+        };
+        if (path.length === 0) {
+          return ret;
+        }
+        code = path.charCodeAt(0);
+        isAbsolute = code === 47;
+        start = void 0;
+        if (isAbsolute) {
+          ret.root = '/';
+          start = 1;
+        } else {
+          start = 0;
+        }
+        startDot = -1;
+        startPart = 0;
+        end = -1;
+        matchedSlash = true;
+        i = path.length - 1;
+        preDotState = 0;
+        for (i = k = ref = path.length - 1, ref1 = start; ref <= ref1 ? k <= ref1 : k >= ref1; i = ref <= ref1 ? ++k : --k) {
+          code = path.charCodeAt(i);
+          if (code === 47) {
+            if (!matchedSlash) {
+              startPart = i + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i + 1;
+          }
+          if (code === 46) {
+            if (startDot === -1) {
+              startDot = i;
+            } else if (preDotState !== 1) {
+              preDotState = 1;
+            }
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || (preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)) {
+          if (end !== -1) {
+            if (startPart === 0 && isAbsolute) {
+              ret.base = ret.name = path.slice(1, end);
+            } else {
+              ret.base = ret.name = path.slice(startPart, end);
+            }
+          }
+        } else {
+          if (startPart === 0 && isAbsolute) {
+            ret.name = path.slice(1, startDot);
+            ret.base = path.slice(1, end);
+          } else {
+            ret.name = path.slice(startPart, startDot);
+            ret.base = path.slice(startPart, end);
+          }
+          ret.ext = path.slice(startDot, end);
+        }
+        if (startPart > 0) {
+          ret.dir = path.slice(0, startPart - 1);
+        } else if (isAbsolute) {
+          ret.dir = '/';
+        }
+        return ret;
+      },
+      sep: '/',
+      delimiter: ':',
+      win32: null,
+      posix: null
+    };
     fsys.cwd = function() {
       return fsys.path.resolve(process.cwd());
     };
@@ -296,18 +750,18 @@ SDP.Util = (function() {
     return fsys;
   })();
   util.getOverridePositions = function(genre, category) {
-    var c, ci, g, i, j, k, len, len1, ref, ref1;
+    var c, ci, g, i, k, l, len, len1, ref, ref1;
     genre = genre.replace(/\s/g, "");
     category = category.replace(/\s/g, "");
     ref = SDP.Constants.Genre;
-    for (i = j = 0, len = ref.length; j < len; i = ++j) {
+    for (i = k = 0, len = ref.length; k < len; i = ++k) {
       g = ref[i];
       if (genre === g) {
         if (category === null) {
           return [i];
         }
         ref1 = SDP.Constants.ResearchCategory;
-        for (ci = k = 0, len1 = ref1.length; k < len1; ci = ++k) {
+        for (ci = l = 0, len1 = ref1.length; l < len1; ci = ++l) {
           c = ref1[ci];
           if (c === category) {
             return [i, ci];
@@ -345,7 +799,7 @@ SDP.Util = (function() {
   })();
   util.Weight = (function() {
     function Weight(w1, w2, w3, w4, w5, w6) {
-      var i, j, len, num, ref;
+      var i, k, len, num, ref;
       if (w1 == null) {
         w1 = 0.8;
       }
@@ -384,7 +838,7 @@ SDP.Util = (function() {
           }
         }
         ref = this.arr;
-        for (i = j = 0, len = ref.length; j < len; i = ++j) {
+        for (i = k = 0, len = ref.length; k < len; i = ++k) {
           num = ref[i];
           if (num > 1) {
             this.arr[i] = num / 100;
@@ -478,7 +932,7 @@ SDP.Functional.addResearchItem = function(item) {
 };
 
 SDP.Functional.addPlatform = function(item) {
-  var event, j, len, point, ref;
+  var event, k, len, point, ref;
   if ((SDP.GDT.Platform != null) && item instanceof SDP.GDT.Platform) {
     item = item.toInput();
   }
@@ -488,8 +942,8 @@ SDP.Functional.addPlatform = function(item) {
     if (Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) && Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) && Checks.checkAudienceWeightings(item.audienceWeightings) && Checks.checkGenreWeightings(item.genreWeightings) && Checks.checkDate(item.published) && Checks.checkDate(item.platformRetireDate)) {
       if (item.marketPoints) {
         ref = item.marketPoints;
-        for (j = 0, len = ref.length; j < len; j++) {
-          point = ref[j];
+        for (k = 0, len = ref.length; k < len; k++) {
+          point = ref[k];
           if (!Checks.checkDate(point.date)) {
             return;
           }
@@ -1176,20 +1630,20 @@ Triggers all notifications in the case they couldn't be triggered before (ie: be
  */
 
 GDT.on(GDT.eventKeys.saves.loaded, function() {
-  var i, j, len, ref;
+  var i, k, len, ref;
   ref = SDP.GDT.Internal.notificationsToTrigger;
-  for (j = 0, len = ref.length; j < len; j++) {
-    i = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    i = ref[k];
     GameManager.company.notifications.push(i);
   }
   return SDP.GDT.Internal.notificationsToTrigger = [];
 });
 
 GDT.on(GDT.eventKeys.saves.newGame, function() {
-  var i, j, len, ref;
+  var i, k, len, ref;
   ref = SDP.GDT.Internal.notificationsToTrigger;
-  for (j = 0, len = ref.length; j < len; j++) {
-    i = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    i = ref[k];
     GameManager.company.notifications.push(i);
   }
   return SDP.GDT.Internal.notificationsToTrigger = [];
@@ -1203,7 +1657,7 @@ Allows new platforms to incorporate different images based on the date
 Platforms._oldGetPlatformImage = Platforms.getPlatformImage;
 
 Platforms.getPlatformImage = function(platform, week) {
-  var baseUri, date, i, image, j, len, ref;
+  var baseUri, date, i, image, k, len, ref;
   if (platform.id === 'PC') {
     return Platforms._oldGetPlatformImage(platform, week);
   }
@@ -1214,7 +1668,7 @@ Platforms.getPlatformImage = function(platform, week) {
   image = null;
   if (week && platform.imageDates.constructor === Array) {
     ref = platform.imageDates;
-    for (i = j = 0, len = ref.length; j < len; i = ++j) {
+    for (i = k = 0, len = ref.length; k < len; i = ++k) {
       date = ref[i];
       if (General.getWeekFromDateString(date) <= week && i !== 0) {
         image = "{0}/{1}-{2}.png".format(baseUri, platform.id, String(i + 1));
@@ -1237,11 +1691,11 @@ Training._oldGetAllTraining = Training.getAllTraining;
 Training.moddedTraining = [];
 
 Training.getAllTraining = function() {
-  var j, len, modT, ref, trainings;
+  var k, len, modT, ref, trainings;
   trainings = Training._oldGetAllTraining();
   ref = Training.moddedTraining;
-  for (j = 0, len = ref.length; j < len; j++) {
-    modT = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    modT = ref[k];
     if ((modT.id != null) && modT.isTraining) {
       trainings.push(modT);
     }
@@ -1319,7 +1773,7 @@ SDP.GDT.Internal.getGenericContractsSettings = function(company, type) {
 };
 
 SDP.GDT.Internal.generatePublisherContracts = function(company, settings, maxNumber) {
-  var allPlatforms, audience, audiences, basePay, contracts, count, diffculty, excludes, genre, i, j, lastGame, minScore, name, pay, penalty, platform, platforms, pubName, publisher, publishers, random, ref, researchedTopics, royaltyRate, seed, size, sizeBasePay, sizes, topic, topics;
+  var allPlatforms, audience, audiences, basePay, contracts, count, diffculty, excludes, genre, i, k, lastGame, minScore, name, pay, penalty, platform, platforms, pubName, publisher, publishers, random, ref, researchedTopics, royaltyRate, seed, size, sizeBasePay, sizes, topic, topics;
   contracts = [];
   seed = settings.seed;
   random = new MersenneTwister(SDP.Util.getSeed(settings));
@@ -1387,7 +1841,7 @@ SDP.GDT.Internal.generatePublisherContracts = function(company, settings, maxNum
     medium: 15e4,
     large: 15e5 / 2
   };
-  for (i = j = 0, ref = count; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
     if (platform && (platform.company && random.random() <= 0.2)) {
       publisher = publishers.find(function(val) {
         return val.toString() === platform.company;
@@ -1499,11 +1953,11 @@ Allows adding of standard contract work
 ProjectContracts.moddedContracts = [];
 
 ProjectContracts.getAvailableModContractsOf = function(company, size) {
-  var c, contracts, j, len, ref;
+  var c, contracts, k, len, ref;
   contracts = [];
   ref = ProjectContracts.moddedContracts;
-  for (j = 0, len = ref.length; j < len; j++) {
-    c = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    c = ref[k];
     if ((c.isAvailable == null) || ((c.isAvailable != null) && c.isAvailable(company))) {
       if (c.size === size) {
         contracts.push(c);
@@ -1538,7 +1992,7 @@ ProjectContracts.genericContracts.getContract = function(company) {
 };
 
 SDP.GDT.Internal.generateContracts = function(company, settings, sourceSet, size, maxNumber) {
-  var contract, contracts, count, i, item, j, random, ref, seed, set;
+  var contract, contracts, count, i, item, k, random, ref, seed, set;
   seed = SDP.Util.getSeed(settings);
   random = new MersenneTwister(seed);
   contracts = [];
@@ -1547,7 +2001,7 @@ SDP.GDT.Internal.generateContracts = function(company, settings, sourceSet, size
   if (settings.intialSettings) {
     count = Math.max(1, count);
   }
-  for (i = j = 0, ref = count; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
     if (!(set.length > 0)) {
       continue;
     }
@@ -1679,11 +2133,11 @@ Reviews.getFourRandomReviewers = function(company) {
 };
 
 Reviews.getModdedPositiveMessages = function(game, score) {
-  var j, len, m, ref, result;
+  var k, len, m, ref, result;
   result = [];
   ref = Reviews.moddedMessages;
-  for (j = 0, len = ref.length; j < len; j++) {
-    m = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    m = ref[k];
     if (m.isPositive && !m.isNegative) {
       if (m.getMessage != null) {
         result.push(m.getMessage(game, score));
@@ -1696,11 +2150,11 @@ Reviews.getModdedPositiveMessages = function(game, score) {
 };
 
 Reviews.getModdedNegativeMessages = function(game, score) {
-  var j, len, m, ref, result;
+  var k, len, m, ref, result;
   result = [];
   ref = Reviews.moddedMessages;
-  for (j = 0, len = ref.length; j < len; j++) {
-    m = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    m = ref[k];
     if (m.isNegative && !m.isPositive) {
       if (m.getMessage != null) {
         result.push(m.getMessage(game, score));
@@ -1713,11 +2167,11 @@ Reviews.getModdedNegativeMessages = function(game, score) {
 };
 
 Reviews.getModdedGenericMessages = function(game, score) {
-  var j, len, m, ref, result;
+  var k, len, m, ref, result;
   result = [];
   ref = Reviews.moddedMessages;
-  for (j = 0, len = ref.length; j < len; j++) {
-    m = ref[j];
+  for (k = 0, len = ref.length; k < len; k++) {
+    m = ref[k];
     if (!m.isNegative && !m.isPositive) {
       if (m.getMessage != null) {
         result.push(m.getMessage(game, score));
@@ -1740,7 +2194,7 @@ Reviews.getGenericReviewMessage = function(game, score) {
 };
 
 Reviews.getReviews = function(game, finalScore, positiveMessages, negativeMessages) {
-  var i, intScore, j, message, reviewers, reviews, score, scoreVariation, scores, usedMessages, variation;
+  var i, intScore, k, message, reviewers, reviews, score, scoreVariation, scores, usedMessages, variation;
   intScore = Math.floor(finalScore).clamp(1, 10);
   if (finalScore >= 9.5) {
     intScore = 10;
@@ -1752,7 +2206,7 @@ Reviews.getReviews = function(game, finalScore, positiveMessages, negativeMessag
   variation = 1;
   positiveMessages.addRange(Reviews.getModdedPositiveMessages(game));
   negativeMessages.addRange(Reviews.getModdedNegativeMessages(game));
-  for (i = j = 0; j < 4; i = ++j) {
+  for (i = k = 0; k < 4; i = ++k) {
     if (intScore === 5 || intScore === 6) {
       variation = game.company.getRandom() < 0.05 ? 2 : 1;
     }
@@ -1925,7 +2379,7 @@ JobApplicants.searchTests = [
 UI.__olgGenerateJobApplicants = UI._generateJobApplicants;
 
 UI._generateJobApplicants = function() {
-  var a, applicants, baseValue, company, count, d, goodRoll, i, isFamous, j, k, level, maxBonus, maxD, maxRerolls, minD, name, newApplicants, oldApplicants, q, qBonusFactor, r, rBonusFactor, random, ratio, ref, ref1, rerolls, s, sBonusFactor, salary, settings, sex, t, takenNames, test;
+  var a, applicants, baseValue, company, count, d, goodRoll, i, isFamous, k, l, level, maxBonus, maxD, maxRerolls, minD, name, newApplicants, oldApplicants, q, qBonusFactor, r, rBonusFactor, random, ratio, ref, ref1, rerolls, s, sBonusFactor, salary, settings, sex, t, takenNames, test;
   oldApplicants = UI.__olgGenerateJobApplicants();
   settings = GameManager.uiSettings["findStaffData"];
   if (!settings) {
@@ -1951,7 +2405,7 @@ UI._generateJobApplicants = function() {
   takenNames = GameManager.company.staff.map(function(s) {
     return s.name;
   });
-  for (i = j = 0, ref = count; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
     qBonusFactor = ratio / 3 + (1 - ratio / 3) * random.random();
     if (random.random() >= 0.95) {
       maxBonus += 1 / 5;
@@ -2020,7 +2474,7 @@ UI._generateJobApplicants = function() {
     rng: random
   });
   applicants = [];
-  for (i = k = 0, ref1 = count; 0 <= ref1 ? k < ref1 : k > ref1; i = 0 <= ref1 ? ++k : --k) {
+  for (i = l = 0, ref1 = count; 0 <= ref1 ? l < ref1 : l > ref1; i = 0 <= ref1 ? ++l : --l) {
     if (random.random() >= 0.5) {
       a = newApplicants.pickRandom(random);
       applicants.push(a);
@@ -2531,11 +2985,11 @@ SDP.GDT.Platform = (function() {
   };
 
   Platform.prototype.getPrimEvents = function() {
-    var arr, evt, j, len, ref;
+    var arr, evt, k, len, ref;
     arr = [];
     ref = this.events;
-    for (j = 0, len = ref.length; j < len; j++) {
-      evt = ref[j];
+    for (k = 0, len = ref.length; k < len; k++) {
+      evt = ref[k];
       arr.push(evt.toInput());
     }
     return arr;
@@ -2671,14 +3125,14 @@ SDP.GDT.Publisher = (function() {
   };
 
   Publisher.prototype.getAudience = function(random) {
-    var a, auds, j, len, ref, v;
+    var a, auds, k, len, ref, v;
     auds = SDP.Enum.Audience.toArray();
     auds.forEach(function(val, i, arr) {
       return arr.push(val, val);
     });
     ref = SDP.Enum.Audience.toArray();
-    for (j = 0, len = ref.length; j < len; j++) {
-      a = ref[j];
+    for (k = 0, len = ref.length; k < len; k++) {
+      a = ref[k];
       v = Math.floor(General.getAudienceWeighting(this.audWeightings.get(), a) * 10) - 8;
       if (Math.abs(v) > 2) {
         continue;
@@ -2698,14 +3152,14 @@ SDP.GDT.Publisher = (function() {
   };
 
   Publisher.prototype.getGenre = function(random) {
-    var defGenres, g, genres, j, len, v;
+    var defGenres, g, genres, k, len, v;
     defGenres = SDP.Enum.Genre.toArray();
     genres = SDP.Enum.Genre.toArray();
     genres.forEach(function(val, i, arr) {
       return arr.push(val, val);
     });
-    for (j = 0, len = defGenres.length; j < len; j++) {
-      g = defGenres[j];
+    for (k = 0, len = defGenres.length; k < len; k++) {
+      g = defGenres[k];
       v = Math.floor(General.getGenreWeighting(this.genreWeightings.get(), g) * 10) - 8;
       if (Math.abs(v) > 2) {
         continue;
@@ -2725,7 +3179,7 @@ SDP.GDT.Publisher = (function() {
   };
 
   Publisher.prototype.getPlatform = function(random, defPlats) {
-    var j, len, p, platforms, v;
+    var k, len, p, platforms, v;
     defPlats = defPlats.filter(function(p) {
       return this.platformOverride.findIndex(function(v) {
         return v.id === p.id;
@@ -2738,8 +3192,8 @@ SDP.GDT.Publisher = (function() {
     platforms.forEach(function(val, i, arr) {
       return arr.push(val, val);
     });
-    for (j = 0, len = defPlats.length; j < len; j++) {
-      p = defPlats[j];
+    for (k = 0, len = defPlats.length; k < len; k++) {
+      p = defPlats[k];
       v = Math.floor(this.platformOverride.find(function(val) {
         return val.id === p.id;
       }).weight * 10) - 8;
@@ -2761,7 +3215,7 @@ SDP.GDT.Publisher = (function() {
   };
 
   Publisher.prototype.getTopic = function(random, defTopics) {
-    var j, len, p, topics, v;
+    var k, len, p, topics, v;
     defTopics = defTopics.filter(function(t) {
       return this.topicOverride.findIndex(function(v) {
         return v.id === t.id;
@@ -2776,8 +3230,8 @@ SDP.GDT.Publisher = (function() {
     topics.forEach(function(val, i, arr) {
       return arr.push(val, val);
     });
-    for (j = 0, len = defTopics.length; j < len; j++) {
-      p = defTopics[j];
+    for (k = 0, len = defTopics.length; k < len; k++) {
+      p = defTopics[k];
       v = Math.floor(this.topicOverride.find(function(val) {
         return val.id === p.id;
       }).weight * 10) - 8;
@@ -2912,7 +3366,7 @@ SDP.GDT.__notUniqueTopic = function(id) {
 
 SDP.GDT.Topic = (function() {
   function Topic(name, id, genreWeight, audienceWeight) {
-    var c, cats, g, j, k, len, len1, ref, ref1;
+    var c, cats, g, k, l, len, len1, ref, ref1;
     if (id == null) {
       id = name;
     }
@@ -2927,12 +3381,12 @@ SDP.GDT.Topic = (function() {
     };
     this.missionOverride = [];
     ref = SDP.Enum.Genre.toArray();
-    for (j = 0, len = ref.length; j < len; j++) {
-      g = ref[j];
+    for (k = 0, len = ref.length; k < len; k++) {
+      g = ref[k];
       cats = [];
       ref1 = SDP.Enum.ResearchCategory;
-      for (k = 0, len1 = ref1.length; k < len1; k++) {
-        c = ref1[k];
+      for (l = 0, len1 = ref1.length; l < len1; l++) {
+        c = ref1[l];
         cats.push(0);
       }
       this.missionOverride.push(cats);

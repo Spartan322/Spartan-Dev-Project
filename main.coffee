@@ -118,6 +118,48 @@ SDP.Util = (->
 	fs = require('fs')
 	path = require('path')
 
+	normalizeStringPosix = (path, allowAboveRoot) ->
+		res = ''
+		lastSlash = -1
+		dots = 0
+		code = undefined
+		for i in [0..path.length]
+			if i < path.length then code = path.charCodeAt(i)
+			else if code is 47 then break
+			else code = 47
+
+			if code is 47
+				if lastSlash is i - 1 or dots is 1
+					#NOOP
+				else if lastSlash isnt i - 1 and dots is 2
+					if res.length < 2 or res.charCodeAt(res.length - 1) isnt 46 or res.charCodeAt(res.length - 2) isnt 46
+						if res.length > 2
+							start = res.length - 1
+							j = start
+							for j in [start..0]
+								if res.charCodeAt(j) is 47 then break
+							if j isnt start
+								if j is -1 then res = ''
+								else res = res.slice(0, j)
+							lastSlash = i
+							dots = 0
+							continue
+					else if res.length is 2 or res.length is 1
+						res = ''
+						lastSlash = i
+						dots = 0
+						continue
+				if allowAboveRoot
+					if res.length > 0 then res += '/..'
+					else res = '..'
+				else
+					if res.length > 0 then res += '/' + path.slice(lastSlash + 1, i)
+					else res = path.slice(lastSlash + 1, i)
+				lastSlash = i
+				dots = 0
+			else if code is 46 and dots isnt -1 then ++dots else dots = -1
+		return res
+
 	util.isString = (obj) -> obj.constructor is String
 	util.isArray = (obj) -> obj.constructor is Array
 	util.isNumber = (obj) -> not isNaN(obj)
@@ -128,11 +170,252 @@ SDP.Util = (->
 
 	util.Filesystem = (->
 		fsys = {}
-		fsys.Constants = {
-			filesystem: 'posix'
-		}
+		inspect = require('util').inspect
 
-		fsys.path = path[fsys.Constants.filesystem]
+		assertPath = (path) -> if typeof path isnt 'string' then throw new TypeError('Path must be a string. Received ' + inspect(path))
+
+		_format = (sep, pathObject) ->
+			dir = pathObject.dir or pathObject.root
+			base = pathObject.base or ((pathObject.name or '') + (pathObject.ext or ''))
+			if not dir then return base
+			if dir is pathObject.root then return dir + base
+			return dir + sep + base
+
+		# Provides for path.posix not found in nodejs version 0.10
+		# Allows posix standard path management, which is prefered in this project
+		fsys.path = {
+			resolve: (args...) ->
+				resolvedPath = ''
+				resolvedAbsolute = false
+				cwd = undefined
+				`for (var i = args.length - 1 i >= -1 and !resolvedAbsolute i--) {
+					ver path
+					if(i>=0) path = args[i]
+					else {
+						if (cwd is undefined) cwd.process.cwd()
+						path = cwd
+					}
+					assertPath(path)
+					if(path.length is 0) continue
+					resolvedPath = path + '/' + resolvedPath
+					resolvedAbsolute = path.charCodeAt(0) is 47/*/*/)
+				}`
+				resolvedPath = normalizeStringPosix(resolvedPath, not resolvedAbsolute)
+				if resolvedAbsolute
+					if resolvedPath.length > 0 then return '/#{resolvedPath}' else return '/'
+				else if resolvedPath.length > 0 then return resolvedPath else return '.'
+
+			normalize: (path) ->
+				assertPath(path)
+				if path.length is 0 then return '.'
+				`const isAbsolute = path.charCodeAt(0) is 47/*/*/;
+				const trailingSeparator = path.charCodeAt(path.length - 1) is 47/*/*/`
+				path = normalizeStringPosix(path, !isAbsolute)
+				if path.length is 0 and not isAbsolute then path = '.'
+				if path.length is 0 and trailingSeparator then path += '/'
+				if isAbsolute then return '/#{path}'
+				return path
+
+			isAbsolute: (path) ->
+				assertPath(path)
+				return path.length > 0 and path.charCodeAt(0) is 47
+
+			join: (args...) ->
+				if args.length is 0 then return '.'
+				joined = undefined
+				for i, arg in args
+					assertPath(arg)
+					if joined is undefined then joined = arg else joined += '#{joined}/#{arg}'
+				if joined is undefined then return '.'
+				return fsys.path.normalize(joined)
+
+			relative: (from, to) ->
+				assertPath(from)
+				assertPath(to)
+				if from is to then return ''
+				from = fsys.path.resolve(from)
+				to = fsys.path.resolve(to)
+				if from is to then return ''
+				fromStart = 1
+				break for fromStart in [fromStart..from.length] when from.charCodeAt(fromStart) isnt 47
+				fromEnd = from.length
+				fromLen = (fromEnd-fromStart)
+				toStart = 1
+				break for toStart in [toStart..to.length] when to.charCodeAt(toStart) isnt 47
+				toEnd = to.length
+				toLen = (toEnd-toStart)
+				length = if fromLen < toLen then fromLen else toLen
+				lastCommonSep = -1
+				i = 0
+				for i in [i..length]
+					if i is length
+						if toLen > length
+							if to.charCodeAt(toStart + i) is 47 then return to.slice(toStart+i+1)
+							else if i is 0 then to.slice(toStart+i)
+						else if fromLen > length
+							if from.charCodeAt(fromStart + i) is 47 then lastCommonSep = i
+							else if i is 0 then lastCommonSep = 0
+						break
+					fromCode = from.charCodeAt(fromStart + i)
+					toCode = to.charCodeAt(toStart + i)
+					if fromCode isnt toCode then break
+					else if fromCode is 47 then lastCommonSep = i
+				out = ''
+				for i in [fromStart+lastCommonSep+1..fromEnd]
+					if i is fromEnd or from.charCodeAt(i) is 47
+						if out.length is 0 then out += '..' else out += '/..'
+				if out.length > 0 then return out+to.slice(toStart+lastCommonSep)
+				else
+					toStart += lastCommonSep
+					if to.charCodeAt(toStart) is 47 then ++toStart
+					return to.slice(toStart)
+
+			dirname: (path) ->
+				assertPath(path)
+				if path.length is 0 then return '.'
+				code = path.charCodeAt(0)
+				hasRoot = code is 47
+				end = -1
+				matchedSlash = true
+				for i in [path.length-1..1]
+					code = path.charCodeAt(i)
+					if code is 47
+						if not matchedSlash
+							end = i
+							break
+						else matchedSlash = false
+				if end is -1 then return if hasRoot then '/' else '.'
+				if hasRoot and end is 1 then return '//'
+				return path.slice(0, end)
+
+			basename: (path, ext) ->
+				if ext isnt undefined and typeof ext isnt 'string' then throw new TypeError('"ext" argument must be a string')
+				assertPath(path)
+				start = 0
+				end = -1
+				matchedSlash = true
+				i = undefined
+
+				if ext isnt undefined and ext.length > 0 and ext.length <= path.length
+					if ext.length is path.length and ext is path then return ''
+					extIdx = ext.length - 1
+					firstNonSlashEnd = -1
+					for i in [path.length-1..0]
+						code = path.charCodeAt(i)
+						if code is 47
+							if not matchedSlash
+								start = i + 1
+								break
+						else
+							if firstNonSlashEnd is -1
+								matchedSlash = false
+								firstNonSlashEnd = i + 1
+
+							if extIdx >= 0
+								if code is ext.charCodeAt(extIdx)
+									if --extIdx is -1 then end = i
+							else
+							  extIdx = -1
+							  end = firstNonSlashEnd
+
+					if start is end then end = firstNonSlashEnd
+					else if end is -1 then end = path.length
+					return path.slice(start, end)
+				else
+					for i in [path.length-1..0]
+						if path.charCodeAt(i) is 47
+							if not matchedSlash
+								start = i + 1
+								break
+						else if end is -1
+							matchedSlash = false
+							end = i + 1
+
+					if end is -1 then return ''
+					return path.slice(start, end)
+
+			extname: (path) ->
+				assertPath(path)
+				startDot = -1
+				startPart = 0
+				end = -1
+				matchedSlash = true
+				preDotState = 0
+				for i in [path.length-1..0]
+					code = path.charCodeAt(i)
+					if code is 47
+						if not matchedSlash
+							startPart = i + 1
+							break
+						continue
+					if end is -1
+						matchedSlash = false
+						end = i + 1
+					if code is 46#.
+						if startDot is -1 then startDot = i
+						else if preDotState isnt 1 then preDotState = 1
+					else if startDot isnt -1 then preDotState = -1
+
+				if startDot is -1 or	end is -1 or preDotState is 0 or (preDotState is 1 and startDot is end - 1 and startDot is startPart + 1) then return ''
+				return path.slice(startDot, end)
+
+			format: (pathObject) ->
+				if pathObject is null or typeof pathObject isnt 'object' then throw new TypeError('Parameter "pathObject" must be an object, not #{typeof pathObject}')
+				return _format('/', pathObject)
+
+			parse: (path) ->
+				assertPath(path)
+				ret = { root: '', dir: '', base: '', ext: '', name: '' }
+				if path.length is 0 then return ret
+				code = path.charCodeAt(0)
+				isAbsolute = code is 47
+				start = undefined
+				if isAbsolute
+					ret.root = '/'
+					start = 1
+				else start = 0
+				startDot = -1
+				startPart = 0
+				end = -1
+				matchedSlash = true
+				i = path.length - 1
+				preDotState = 0
+				for i in [path.length-1..start]
+					code = path.charCodeAt(i)
+					if code is 47
+						if not matchedSlash
+							startPart = i + 1
+							break
+						continue
+					if end is -1
+						matchedSlash = false
+						end = i + 1
+					if code is 46#.
+						if startDot is -1 then startDot = i
+						else if preDotState isnt 1 then preDotState = 1
+					else if startDot isnt -1 then preDotState = -1
+				if startDot is -1 or end is -1 or (preDotState is 1 and startDot is end - 1 and startDot is startPart + 1)
+					if end isnt -1
+						if startPart is 0 and isAbsolute then ret.base = ret.name = path.slice(1, end)
+						else ret.base = ret.name = path.slice(startPart, end)
+				else
+					if startPart is 0 and isAbsolute
+						ret.name = path.slice(1, startDot)
+						ret.base = path.slice(1, end)
+					else
+						ret.name = path.slice(startPart, startDot)
+						ret.base = path.slice(startPart, end)
+					ret.ext = path.slice(startDot, end)
+
+				if startPart > 0 then ret.dir = path.slice(0, startPart - 1)
+				else if isAbsolute then ret.dir = '/'
+				return ret
+
+			sep: '/'
+			delimiter: ':'
+			win32: null
+			posix: null
+		}
 
 		fsys.cwd = -> fsys.path.resolve(process.cwd())
 
@@ -599,8 +882,8 @@ SDP.Util = {}
 SDP.Util.getRandomInt = (random, max) -> Math.max max - 1, Math.floor random.random() * max unless typeof random?.random isnt 'function'
 
 SDP.Util.generateNewSeed = (settings) ->
-	settings.seed = Math.floor(Math.random() * 65535);
-	settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3;
+	settings.seed = Math.floor(Math.random() * 65535)
+	settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3
 	settings.contractsDone = []
 
 SDP.Util.getSeed = (settings) ->
@@ -717,9 +1000,9 @@ SDP.Graphical = ((s) ->
 				$("head").find("##{id}").append(content)
 
 			c.addCss = (id, content) ->
-				id = vis+id;
+				id = vis+id
 				$("head").append('<style id="#{e}" type="text/css"></style>') if $("##{id}").length is 0
-				$("head").find("##{id}").html(content);
+				$("head").find("##{id}").html(content)
 			c
 		)(v.Custom or {})
 
@@ -1338,7 +1621,7 @@ UI._generateJobApplicants = ->
 		r = 1 / 5 + maxBonus * rBonusFactor
 		sBonusFactor = random.random()
 		s = 1 / 5 + maxBonus * sBonusFactor
-		goodRoll = sBonusFactor > 0.5 && (qBonusFactor > 0.5 && rBonusFactor > 0.5)
+		goodRoll = sBonusFactor > 0.5 and (qBonusFactor > 0.5 and rBonusFactor > 0.5)
 		if not goodRoll and (rerolls < maxRerolls and random.random() <= (ratio + 0.1).clamp(0, 0.7))
 			i--
 			rerolls++
