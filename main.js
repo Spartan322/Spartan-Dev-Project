@@ -82,9 +82,11 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] sourceId The id of the corresponding event object
 @attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
  */
-var Companies, JobApplicants, SDP, __notificationRep, classes,
+var Companies, JobApplicants, SDP, __notificationRep, classes, style,
   slice = [].slice,
   bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
+style = require('./lib-js/style');
 
 SDP = {};
 
@@ -272,7 +274,7 @@ SDP.Util = (function() {
         resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
         if (resolvedAbsolute) {
           if (resolvedPath.length > 0) {
-            return '/#{resolvedPath}';
+            return "/" + resolvedPath;
           } else {
             return '/';
           }
@@ -297,7 +299,7 @@ SDP.Util = (function() {
           path += '/';
         }
         if (isAbsolute) {
-          return '/#{path}';
+          return "/" + path;
         }
         return path;
       },
@@ -318,7 +320,7 @@ SDP.Util = (function() {
           if (joined === void 0) {
             joined = arg;
           } else {
-            joined += '#{joined}/#{arg}';
+            joined += joined + "/" + arg;
           }
         }
         if (joined === void 0) {
@@ -537,7 +539,7 @@ SDP.Util = (function() {
       },
       format: function(pathObject) {
         if (pathObject === null || typeof pathObject !== 'object') {
-          throw new TypeError('Parameter "pathObject" must be an object, not #{typeof pathObject}');
+          throw new TypeError("Parameter 'pathObject' must be an object, not " + (typeof pathObject));
         }
         return _format('/', pathObject);
       },
@@ -671,7 +673,7 @@ SDP.Util = (function() {
       result = null;
       fs.readFile(p.get(), function(err, data) {
         if (err) {
-          throw err;
+          alert(err);
         }
         return result = JSON.parse(data);
       });
@@ -687,7 +689,7 @@ SDP.Util = (function() {
       return fsys.walk(p.get(), function(err, files) {
         var results;
         if (err) {
-          throw err;
+          alert(err);
         }
         results = [];
         files.forEach(function(file) {
@@ -795,7 +797,7 @@ SDP.Util = (function() {
     if (!util.isString(item.objectType)) {
       throw new TypeError("SDP.Util.registerJSONObject can not work on items that don't contain an objectType field");
     }
-    func = SDP.Functional['add#{item.objectType.capitalize()}Item'];
+    func = SDP.Functional["add" + (item.objectType.capitalize()) + "Item"];
     if (!func) {
       alert("SDP.Util.registerJSONObject could not find the function for objectType " + item.objectType);
       return;
@@ -950,7 +952,7 @@ SDP.Util = (function() {
       if (w === void 0) {
         w = m;
       }
-      this.string = '#{y}/#{m}/#{w}';
+      this.string = y + "/" + m + "/" + w;
     }
 
     Date.prototype.convert = function() {
@@ -959,6 +961,110 @@ SDP.Util = (function() {
 
     return Date;
 
+  })();
+  util.Logger = (function() {
+    var createTimestamp, logger, stream;
+    logger = {
+      enabled: true,
+      show: 200,
+      levels: {},
+      addLevel: function(level, weight, sty, prefix) {
+        if (prefix == null) {
+          prefix = level;
+        }
+        if (sty.constructor === style.FormattedStyle) {
+          sty = sty.getStyle();
+        }
+        logger.levels[level] = {
+          level: level,
+          prefix: prefix,
+          style: sty,
+          weight: weight,
+          format: function(msg) {
+            return logger.format(level, msg);
+          },
+          log: function(msg) {
+            return logger.log(level, msg);
+          }
+        };
+        if (logger[level] === void 0) {
+          return logger[level] = logger.levels[level].log;
+        }
+      },
+      setShow: function(level) {
+        if (level.constructor === Object) {
+          return logger.show = level.weight;
+        } else if (level.constructor === String) {
+          return logger.show = logger.levels[level].weight;
+        } else {
+          return logger.show = level;
+        }
+      }
+    };
+    logger.addLevel('verbose', 0, {
+      fg: 'blue',
+      bg: 'black'
+    }, 'VERBOSE');
+    logger.addLevel('debug', 100, {
+      fg: 'blue'
+    }, 'DEBUG');
+    logger.addLevel('info', 200, {
+      fg: 'green'
+    }, 'INFO');
+    logger.addLevel('warn', 300, {
+      fg: 'black',
+      bg: 'yellow'
+    }, 'WARN');
+    logger.addLevel('error', 400, {
+      fg: 'red',
+      bg: 'black'
+    }, 'ERROR');
+    logger.addLevel('fatal', 500, {
+      fg: 'red',
+      bg: 'black'
+    }, 'FATAL');
+    stream = process.stderr;
+    Object.defineProperty(logger, 'stream', {
+      set: function(newStream) {
+        stream = newStream;
+        return style.stream = stream;
+      },
+      get: function() {
+        return stream;
+      }
+    });
+    createTimestamp = function(d) {
+      var formatNumbers;
+      formatNumbers = function(n) {
+        if (n >= 0 && n < 10) {
+          return "0" + n;
+        } else {
+          return n + "";
+        }
+      };
+      return [[formatNumbers(d.getFullYear()), formatNumbers(d.getMonth() + 1), d.getDate()].join("-"), [formatNumbers(d.getHours()), formatNumbers(d.getMinutes()), formatNumbers(d.getHours())].join(":")].join("|");
+    };
+    logger.format = function(level, msg, prefix) {
+      if (prefix == null) {
+        prefix = '';
+      }
+      if (logger.levels[level] != null) {
+        level = logger.levels[level];
+      } else {
+        return "Level " + level + " does not exist";
+      }
+      return style.format(level.style, "" + prefix + level.prefix + ": " + msg);
+    };
+    logger.log = function(level, msg) {
+      var ref;
+      if (logger.levels[level] == null) {
+        return "Level " + level + " does not exist";
+      }
+      if (logger.enabled && logger.stream && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
+        return logger.stream.write(logger.format(level, msg, (createTimestamp(new Date())) + "|"));
+      }
+    };
+    return logger;
   })();
   return util;
 })();
@@ -1515,14 +1621,14 @@ SDP.Graphical = (function(s) {
       c.setCss = function(id, content) {
         id = vis + id;
         if ($("#" + id).length === 0) {
-          $("head").append('<style id="#{e}" type="text/css"></style>');
+          $("head").append("<style id='" + e + "' type='text/css'></style>");
         }
         return $("head").find("#" + id).append(content);
       };
       c.addCss = function(id, content) {
         id = vis + id;
         if ($("#" + id).length === 0) {
-          $("head").append('<style id="#{e}" type="text/css"></style>');
+          $("head").append("<style id='" + e + "' type='text/css'></style>");
         }
         return $("head").find("#" + id).html(content);
       };

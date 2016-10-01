@@ -80,7 +80,7 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] sourceId The id of the corresponding event object
 @attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
 ###
-
+style = require('./lib-js/style')
 
 # @namespace Spartan Dev Project
 #
@@ -113,7 +113,7 @@ jSTORAGE End
 ###
 "use strict"
 
-SDP.Util = (->
+SDP.Util = ( ->
 	util = {}
 	fs = require('fs')
 	path = require('path')
@@ -169,12 +169,12 @@ SDP.Util = (->
 	util.isBoolean = (obj) -> obj is true or obj is false
 	util.isFunction = (obj) -> obj.constructor is Function
 
-	String.prototype.capitalize = (index = 0) ->
+	String::capitalize = (index = 0) ->
 		halfResult = @charAt(index).toUpperCase() + @slice(index+1)
 		if halfResult.length is @length then return halfResult
 		@slice(0, index) + halfResult
 
-	util.Filesystem = (->
+	util.Filesystem = ( ->
 		fsys = {}
 		inspect = require('util').inspect
 
@@ -208,7 +208,7 @@ SDP.Util = (->
 				}`
 				resolvedPath = normalizeStringPosix(resolvedPath, not resolvedAbsolute)
 				if resolvedAbsolute
-					if resolvedPath.length > 0 then return '/#{resolvedPath}' else return '/'
+					if resolvedPath.length > 0 then return "/#{resolvedPath}" else return '/'
 				else if resolvedPath.length > 0 then return resolvedPath else return '.'
 
 			normalize: (path) ->
@@ -219,7 +219,7 @@ SDP.Util = (->
 				path = normalizeStringPosix(path, !isAbsolute)
 				if path.length is 0 and not isAbsolute then path = '.'
 				if path.length is 0 and trailingSeparator then path += '/'
-				if isAbsolute then return '/#{path}'
+				if isAbsolute then return "/#{path}"
 				return path
 
 			isAbsolute: (path) ->
@@ -231,7 +231,7 @@ SDP.Util = (->
 				joined = undefined
 				for i, arg in args
 					assertPath(arg)
-					if joined is undefined then joined = arg else joined += '#{joined}/#{arg}'
+					if joined is undefined then joined = arg else joined += "#{joined}/#{arg}"
 				if joined is undefined then return '.'
 				return fsys.path.normalize(joined)
 
@@ -366,7 +366,7 @@ SDP.Util = (->
 				return path.slice(startDot, end)
 
 			format: (pathObject) ->
-				if pathObject is null or typeof pathObject isnt 'object' then throw new TypeError('Parameter "pathObject" must be an object, not #{typeof pathObject}')
+				if pathObject is null or typeof pathObject isnt 'object' then throw new TypeError("Parameter 'pathObject' must be an object, not #{typeof pathObject}")
 				return _format('/', pathObject)
 
 			parse: (path) ->
@@ -451,7 +451,7 @@ SDP.Util = (->
 			if p.extname() isnt '.json' then throw new TypeError("SDP.Util.Filesystem.readJSONFile only operates on JSON files")
 			result = null
 			fs.readFile(p.get(), (err, data) ->
-				if err then throw err
+				if err then alert(err)
 				result = JSON.parse(data)
 			)
 			result
@@ -460,7 +460,7 @@ SDP.Util = (->
 			if p.constructor isnt util.Path then p = new fsys.Path(path)
 			if not p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.readJSONDirectory can not operate on just files")
 			return fsys.walk(p.get(), (err, files) ->
-				if err then throw err
+				if err then alert(err)
 				results = []
 				files.forEach((file) ->
 					pa = new fsys.Path(file)
@@ -525,7 +525,7 @@ SDP.Util = (->
 
 	util.registerJSONObject = (item) ->
 		if not util.isString(item.objectType) then throw new TypeError("SDP.Util.registerJSONObject can not work on items that don't contain an objectType field")
-		func = SDP.Functional['add#{item.objectType.capitalize()}Item']
+		func = SDP.Functional["add#{item.objectType.capitalize()}Item"]
 		if not func
 			alert("SDP.Util.registerJSONObject could not find the function for objectType #{item.objectType}")
 			return
@@ -592,10 +592,77 @@ SDP.Util = (->
 			if y is false then [y,m,w] = START.split('/')
 			if m is undefined then m = y
 			if w is undefined then w = m
-			@string = '#{y}/#{m}/#{w}'
+			@string = "#{y}/#{m}/#{w}"
 
 		convert: ->
 			new String(@string)
+
+	util.Logger = ( ->
+		logger = {
+			enabled: true
+			show: 200
+			levels: {}
+			addLevel: (level, weight, sty, prefix = level) ->
+				if sty.constructor is style.FormattedStyle then sty = sty.getStyle()
+				logger.levels[level] = {
+					level: level
+					prefix: prefix
+					style: sty
+					weight: weight
+					format: (msg) -> logger.format(level, msg)
+					log: (msg) -> logger.log(level, msg)
+				}
+				if logger[level] is undefined then logger[level] = logger.levels[level].log
+
+			setShow: (level) ->
+				if level.constructor is Object then logger.show = level.weight
+				else if level.constructor is String then logger.show = logger.levels[level].weight
+				else logger.show = level
+		}
+
+		logger.addLevel('verbose', 0, { fg: 'blue', bg: 'black' }, 'VERBOSE')
+		logger.addLevel('debug', 100, { fg: 'blue'}, 'DEBUG')
+		logger.addLevel('info', 200, { fg: 'green'}, 'INFO')
+		logger.addLevel('warn', 300, { fg: 'black', bg: 'yellow' }, 'WARN')
+		logger.addLevel('error', 400, { fg: 'red', bg: 'black' }, 'ERROR')
+		logger.addLevel('fatal', 500, { fg: 'red', bg: 'black' }, 'FATAL')
+
+		stream = process.stderr
+		Object.defineProperty(logger, 'stream',
+			set: (newStream) ->
+				stream = newStream
+				style.stream = stream
+
+			get: -> stream
+		)
+
+		createTimestamp = (d) ->
+			formatNumbers = (n) -> if (n >= 0 and n < 10) then "0" + n else n + ""
+			[
+				[
+					formatNumbers(d.getFullYear())
+					formatNumbers(d.getMonth() + 1)
+					d.getDate()
+				].join("-")
+				[
+					formatNumbers(d.getHours())
+					formatNumbers(d.getMinutes())
+					formatNumbers(d.getHours())
+				].join(":")
+			].join("|")
+
+		logger.format = (level, msg, prefix = '') ->
+			if logger.levels[level]? then level = logger.levels[level]
+			else return "Level #{level} does not exist"
+			style.format(level.style, "#{prefix}#{level.prefix}: #{msg}")
+
+		logger.log = (level, msg) ->
+			if not logger.levels[level]? then return "Level #{level} does not exist"
+			if logger.enabled and logger.stream and logger.levels[level]?.weight >= logger.show
+				logger.stream.write(logger.format(level, msg, "#{createTimestamp(new Date())}|"))
+
+		logger
+	)()
 
 	util
 )()
@@ -1024,12 +1091,12 @@ SDP.Graphical = ((s) ->
 			vis = "SDP-Visuals-Custom"
 			c.setCss = (id, content) ->
 				id = vis+id
-				$("head").append('<style id="#{e}" type="text/css"></style>') if $("##{id}").length is 0
+				$("head").append("<style id='#{e}' type='text/css'></style>") if $("##{id}").length is 0
 				$("head").find("##{id}").append(content)
 
 			c.addCss = (id, content) ->
 				id = vis+id
-				$("head").append('<style id="#{e}" type="text/css"></style>') if $("##{id}").length is 0
+				$("head").append("<style id='#{e}' type='text/css'></style>") if $("##{id}").length is 0
 				$("head").find("##{id}").html(content)
 			c
 		)(v.Custom or {})

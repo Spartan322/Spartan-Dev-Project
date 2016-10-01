@@ -16,6 +16,8 @@ This API is not complete, nor is it likely not to create problems or conflicts, 
 #### Third Party
 [jStorage](https://github.com/andris9/jStorage) from andris9
 
+[console-control-strings](https://github.com/iarna/console-control-strings) from iarna
+
 ### Contribution Setup
 In order to develop for this project, you must have coffeescript installed and readily available on your computer:
 
