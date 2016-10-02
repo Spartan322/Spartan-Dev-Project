@@ -17,9 +17,9 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] publishDate The release date of the platform
 @attribute [String] retireDate The retire date of the platform
 @attribute [Integer] devCost The dev cost for developing on the platform
-@attribute [Integer] techLevel The tech level of the platform (1-9, determines how ingenious games and the platform is)
+@attribute [Integer] techLevel The tech level of the platform (1-9, determines how ingenious the platform and the games for it will be)
 @attribute [String] iconUri The icon refered to for the icon of the platform (or base uri if contains imageDates)
-@attribute [Array {String date, Float amount}] marketKeyPoints The key date points of the market in which the units sold change to the amount
+@attribute [Array {String date, Float amount}] marketPoints The key date points of the market in which the units sold change to the amount
 @attribute [Array [6 Float]] genreWeight The weightings per genre based on SDP.Constants.Genre
 @attribute [Array [3 Float]] audienceWeight The weightings per audience based on SDP.Constants.Audience
 @optional @attribute [Array [String]] imageDates The dates for the platform image to change
@@ -543,6 +543,12 @@ SDP.Util = ( ->
 				break
 		return undefined
 
+	util.fixItemNaming = (item, originalName, fixName) ->
+		if item[originalName]?
+			item[fixName] = item[originalName]
+			item[originalName] = undefined
+		item
+
 	class util.Image
 		constructor: (@uri) ->
 			@uri = null if not util.isString(@uri)
@@ -659,7 +665,7 @@ SDP.Util = ( ->
 		logger.log = (level, msg) ->
 			if not logger.levels[level]? then return "Level #{level} does not exist"
 			if logger.enabled and logger.stream and logger.levels[level]?.weight >= logger.show
-				logger.stream.write(logger.format(level, msg, "#{createTimestamp(new Date())}|"))
+				logger.stream.write(logger.format(level, msg, "[#{createTimestamp(new Date())}]"))
 
 		logger
 	)()
@@ -712,7 +718,6 @@ SDP.Functional = {}
 #
 # @param [ResearchItem] item The item to register
 SDP.Functional.addResearchItem = (item) ->
-	item = item.toInput() if SDP.GDT.Research? and item instanceof SDP.GDT.Research
 	if item.v? then GDT.addResearchItem(item) else
 		Research.engineItems.push(item) if Checks.checkPropertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.checkUniqueness(item, 'id', Research.getAllItems())
 	return
@@ -721,33 +726,43 @@ SDP.Functional.addResearchItem = (item) ->
 #
 # @param [PlatformItem] item The item to register
 SDP.Functional.addPlatformItem = (item) ->
-	item = item.toInput() if SDP.GDT.Platform? and item instanceof SDP.GDT.Platform
-	if item.iconUri? then GDT.addPlatform(item) else
-		if Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) and Checks.checkAudienceWeightings(item.audienceWeightings) and Checks.checkGenreWeightings(item.genreWeightings) and Checks.checkDate(item.published) and Checks.checkDate(item.platformRetireDate)
-			if item.marketPoints then for point in item.marketPoints
-				return unless Checks.checkDate(point.date)
-			if Checks.checkUniqueness(item.name, 'name', Companies.getAllCompanies())
-				SDP.GDT.addCompany(item.name).addPlatform(item)
-			else Platforms.allPlatforms.push(item)
-			if item.events then for event of item.events
-				GDT.addEvent(event) unless event instanceof SDP.GDT.Event then event.add()
+	fix = SDP.Util.fixItemNaming
+	fix(item, 'licensePrice','licencePrize')
+	fix(item, 'publishDate', 'published')
+	fix(item, 'retireDate', 'platformRetireDate')
+	fix(item, 'devCosts', 'developmentCosts')
+	fix(item, 'genreWeight', 'genreWeightings')
+	fix(item, 'audienceWeight', 'audienceWeightings')
+	fix(item, 'marketPoints', 'marketKeyPoints')
+
+	if Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) and Checks.checkAudienceWeightings(item.audienceWeightings) and Checks.checkGenreWeightings(item.genreWeightings) and Checks.checkDate(item.published) and Checks.checkDate(item.platformRetireDate)
+		if item.marketKeyPoints then for point in item.marketKeyPoints
+			return unless Checks.checkDate(point.date)
+		###
+		if Checks.checkUniqueness(item.name, 'name', Companies.getAllCompanies())
+			SDP.GDT.addCompany(item.name).addPlatform(item)
+		else
+		###
+		Platforms.allPlatforms.push(item)
+		if item.events then for event of item.events
+			GDT.addEvent(event)
 	return
 
 # Registers a Topic item
 #
 # @param [TopicItem] item The item to register
 SDP.Functional.addTopicItem = (item) ->
-	item = item.toInput() if SDP.GDT.Topic? and item instanceof SDP.GDT.Topic
-	item.genreWeightings = item.genreWeightings.toGenre().get() if SDP.GDT.Weight? and item.genreWeightings instanceof SDP.GDT.Weight
-	item.audienceWeightings = item.audienceWeightings.toAudience().get() if SDP.GDT.Weight? and item.audienceWeightings instanceof SDP.GDT.Weight
+	fix = SDP.Util.fixItemNaming
+	fix(item, 'genreWeight', 'genreWeightings')
+	fix(item, 'audienceWeight', 'audienceWeightings')
+	fix(item, 'overrides', 'missionOverrides')
 	GDT.addTopic(item)
 
 # Registers a Research Project item
 #
 # @param [ResearchProjectItem] item The item to register
 SDP.Functional.addResearchProjectItem = (item) ->
-	item = item.toInput() if SDP.GDT.ResearchProject? and item instanceof SDP.GDT.ResearchProject
-	item.canResearch = ((company)->true) unless item.canResearch?
+	unless item.canResearch? then item.canResearch = ((company)->true)
 	if Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) and Checks.checkUniqueness(item, 'id', Research.bigProjects)
 		Research.bigProjects.push(item)
 	return
@@ -914,9 +929,494 @@ SDP.GDT.addCompany = (item) ->
 		Companies.moddedCompanies.push(item)
 	return item
 
-###
-GDT Utility: Functions which are for utility of GDT
-###
+SDP.GDT = ( ->
+	GDT = {}
+	GDT.Company = {
+		companies: {}
+		clientUid: undefined
+		addCompany: (company) ->
+			if not company.uid then company.uid = GameManager.getGUID()
+			GDT.Company.companies[company.uid] = company
+			if company is GameManager.company then clientUid = company.uid
+		containsCompany: (company) -> companies[company.uid or company]?
+		getCompanies: -> GDT.Company.companies.slice()
+		getClientCompany: -> GDT.Company.companies[GDT.Company.clientUid]
+	}
+	GDT.Company.addCompany(GameManager.company)
+
+	GDT.ResearchProject = {
+		projects: Research.bigProjects.slice()
+		getAll: -> GDT.ResearchProject.projects.slice()
+		getAvailable: (company, zone) ->
+			GDT.ResearchProject.getAll().filter((p) ->
+				p.targetZone is zone and p.canResearch(company)
+			)
+	}
+	General.getAvailableProjects = GDT.ResearchProject.getAvailable
+
+	GDT.Training = {
+		trainings: Training.getAllTrainings()
+		getAll: ->
+			results = []
+			for item in GDT.Training.trainings.slice()
+				if item.id? and (item.pointsCost? and item.duration?)
+					item.isTraining = true
+					results.push(item)
+			results
+		getAvailable: (staff) ->
+			results = []
+			for t in GDT.Training.getAll()
+				results.push if (t.canSee and t.can(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
+			results
+	}
+	Training.getAllTrainings = GDT.Training.getAll
+	Training.getAvailableTraining = GDT.Training.getAvailable
+
+	# To prevent namespace clutter, stuck the contract stuff in a seperate function block
+	( ->
+		`var smallContracts = [{
+			name: "Logo Animation".localize("heading"),
+			description: "Create an animation for an existing logo.".localize(),
+			tF: 1,
+			dF: 2.5,
+			rF: 1.5
+		}, {
+			name: "Character Design".localize("heading"),
+			description: "Design some game characters.".localize(),
+			tF: 1,
+			dF: 4.5,
+			rF: 1.5
+		}, {
+			name: "Playtest".localize("heading"),
+			description: "Help to playtest a game.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}, {
+			name: "Game Backdrops".localize("heading"),
+			description: "Design some simple background graphics for a game.".localize(),
+			tF: 1,
+			dF: 2,
+			rF: 1.5
+		}, {
+			name: "Setup Computers".localize("heading"),
+			description: "Install Mirconoft BOSS on computers".localize(),
+			tF: 2,
+			dF: 0.4
+		}, {
+			name: "Debug program".localize("heading"),
+			description: "Help debugging a convoluted BASE program.".localize(),
+			tF: 2,
+			dF: 0.2
+		}, {
+			name: "Spritesheet Software".localize("heading"),
+			description: "Our staff needs to be taught how to use these modern technologies.".localize(),
+			tF: 3,
+			dF: 2
+		}, {
+			name: "Library Software".localize("heading"),
+			description: "Develop a simple library management system".localize(),
+			tF: 5,
+			dF: 1
+		}];
+		var mediumContracts = [{
+			name: "Usability Study".localize("heading"),
+			description: "Perform a detailed usability study.".localize(),
+			tF: 5,
+			dF: 6.5
+		}, {
+			name: "Review Game Concept".localize("heading"),
+			description: "Review a game concept using your expertise.".localize(),
+			tF: 3,
+			dF: 8,
+			rF: 1.5
+		}, {
+			name: "Game Art".localize("heading"),
+			description: "Help out on a project with some game art".localize(),
+			tF: 5,
+			dF: 6,
+			rF: 1.5
+		}, {
+			name: "Clean up database".localize("heading"),
+			description: "Should one table really have 200 columns? Probably not.".localize(),
+			tF: 5,
+			dF: 1
+		}, {
+			name: "Accounting Software".localize("heading"),
+			description: "Develop a simple accounting software. Are those ever simple?".localize(),
+			tF: 5,
+			dF: 1
+		}, {
+			name: "Time Tracking".localize("heading"),
+			description: "Design and develop a time tracking system.".localize(),
+			tF: 3,
+			dF: 1
+		}, {
+			name: "Design a board game".localize("heading"),
+			description: "Let's see how your skills translate to traditional games.".localize(),
+			dF: 5,
+			tF: 0.2,
+			rF: 2
+		}, {
+			name: "Horoscope Generator".localize("heading"),
+			description: "Making up horoscopes is hard work. We want it automated.".localize(),
+			dF: 5,
+			tF: 1
+		}, {
+			name: "Character Dialogues".localize("heading"),
+			description: "Improve our character dialogues.".localize(),
+			dF: 5,
+			tF: 1,
+			rF: 1.4
+		}, {
+			name: "Futuristic Application".localize("heading"),
+			description: "We need an application that looks futuristic for a movie.".localize(),
+			dF: 3,
+			tF: 2,
+			rF: 1.5
+		}, {
+			name: "Vacuum Robot".localize("heading"),
+			description: "Create a revolutionary AI for a vacuum robot".localize(),
+			tF: 2,
+			dF: 1.4
+		}, {
+			name: "Website".localize("heading"),
+			description: "We just heard of this thing called internet. We want to have one.".localize(),
+			tF: 2,
+			dF: 1.3
+		}];
+		var largeContracts = [{
+			name: "Game Port".localize("heading"),
+			description: "Port a game to a different platform.".localize(),
+			tF: 3.2,
+			dF: 1.7,
+			rF: 1.2
+		}, {
+			name: "Cut Scenes".localize("heading"),
+			description: "Deliver professional cut scenes for a game.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}, {
+			name: "Space Shuttle".localize("heading"),
+			description: "Deliver part of the space shuttle control software.".localize(),
+			tF: 3,
+			dF: 2
+		}, {
+			name: "Alien Search".localize("heading"),
+			description: "Optimize our search for alien life forms using advanced AI techniques.".localize(),
+			tF: 3,
+			dF: 1.8,
+			rF: 1.3
+		}, {
+			name: "Movies".localize("heading"),
+			description: "We need your skills in our latest blockbuster production.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}]`
+		generateConvertContracts = (type) ->
+			(e) ->
+				e.size = type
+				e.id = e.name.replace(' ', '')
+		GDT.Contract = {
+			contracts: []
+			getAll: -> GDT.Contract.contracts.slice()
+			getAvailable: (company) ->
+				results = []
+				for c in GDT.Contract.getAll().filter((c) -> not contr.isAvailable? or contr.isAvailable(company))
+					results.push(c)
+				results
+			getSettings: (company, size) ->
+				key = "contracts#{size}"
+				settings = company.flags[key]
+				if not settings
+					settings = {id:key}
+					company.flags[key] = settings
+				settings
+			getSeed: (settings) ->
+				newSeed = ->
+					settings.seed = Math.floor(Math.random() * 65535);
+					settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3;
+					settings.contractsDone = []
+				if not settings.seed
+					newSeed()
+					settings.intialSettings = true
+				else if settings.expireBy <= GameManager.gameTime
+					newSeed()
+					settings.intialSettings = false
+				settings.seed
+			createFromTemplate: (company, template, random) ->
+				r = random.random()
+				if random.random > 0.8 then r+= random.random()
+				minPoints = switch template.size
+					when 'small' then 11
+					when 'medium' then 30
+					when 'large' then 100
+				minPoints += 6 if minPoints is 12 and company.staff.length > 2
+				minPoints += minPoints * (company.getCurrentDate().year / 25)
+				points = minPoints + minPoints * r
+				pointPart = points / (template.dF + template.tF)
+				d = pointPart * template.dF
+				t = pointPart * template.tF
+				d += d * 0.2 * random.random() * random.randomSign()
+				t += t * 0.2 * random.random() * random.randomSign()
+				d = Math.floor(d)
+				t = Math.floor(t)
+				pay = Math.floor(points*1e3/1e3) * 1e3
+				weeks = if template.size is small then Math.floor(3 + 3 * random.random()) else Math.floor(3 + 7 * random.random())
+				penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random())/1e3) * 1e3
+				{
+					name: template.name
+					description: template.description
+					id: 'genericContracts'
+					requiredD: d
+					requiredT: t
+					spawnedD: 0
+					spawnedT: 0
+					payment: pay
+					penalty: -penalty
+					weeksToFinish: weeks
+					rF: template.rF
+					isGeneric: true
+					size: template.size
+				}
+			generate: (company, size, max) ->
+				settings = GDT.Contract.getSettings(company, size)
+				random = new MersenneTwister(GDT.Contract.getSeed(settings))
+				count = Math.max(max - 1, Math.floor(random.random() * max))
+				results = []
+				set = GDT.Contract.getAvailable(company).filter((e) -> e.size is size)
+				if settings.initialSettings then count = Math.max(1, count)
+				i = 0
+				while i < count and set.length > 0
+					item = set.pickRandom(random)
+					set.remove(item)
+					contractInstance = GDT.Contract.createFromTemplate(company, item, random)
+					contractInstance.index = i
+					if settings.contractsDone and settings.contractsDone.indexOf(i) isnt -1
+						contract.skip = true
+					contracts.push(contract)
+					i++
+				contracts
+			getList: (company) ->
+				settings = GDT.Contract.getSettings(company, 'small')
+				results = GDT.Contract.generate(company, 'small', 4)
+				if company.flags.mediumContractsEnabled then results.addRange(GDT.Contract.generate(company, 'medium', 3))
+				if company.flags.largeContractsEnabled then results.addRange(GDT.Contract.generate(company, 'large', 2))
+				results.shuffle(new MersenneTwister(GDT.Contract.getSeed(settings))).filter((c) -> not c.skip)
+		}
+		smallContracts.forEach(generateConvertContracts('small'))
+		mediumContracts.forEach(generateConvertContracts('medium'))
+		largeContracts.forEach(generateConvertContracts('large'))
+		GDT.Contract.contracts.addRange(smallContracts)
+		GDT.Contract.contracts.addRange(mediumContracts)
+		GDT.Contract.contracts.addRange(largeContracts)
+		ProjectContracts.generateContracts.getContract = GDT.Contract.getList
+	)()
+
+
+	( ->
+		`var publishers = [{
+			id: "ActiveVisionaries",
+			name: "Active Visionaries"
+		}, {
+			id: "ea",
+			name: "Electronic Mass Productions"
+		}, {
+			id: "RockvilleSoftworks",
+			name: "Rockville Softworks"
+		}, {
+			id: "BlueBitGames",
+			name: "Blue Bit Games"
+		}, {
+			id: "CapeCom",
+			name: "CapeCom"
+		}, {
+			id: "Codemeisters",
+			name: "Codemeisters"
+		}, {
+			id: "DeepPlatinum",
+			name: "Deep Platinum"
+		}, {
+			id: "InfroGames",
+			name: "InfroGames"
+		}, {
+			id: "LoWoodProductions",
+			name: "LoWood Productions"
+		}, {
+			id: "TGQ",
+			name: "TGQ"
+		}, {
+			id: "\u00dcberSoft",
+			name: "\u00dcberSoft"
+		}]`
+		GDT.Publisher = {
+			publishers: publishers.slice()
+			getAll: -> GDT.Publisher.publishers.slice()
+			getAvailable: (company) ->
+				results = []
+				for c in GDT.Publisher.getAll().filter((c) -> not contr.isAvailable? or contr.isAvailable(company))
+					results.push(c)
+				results
+			generate: (company, max) ->
+				settings = GDT.Contract.getSettings(company, size)
+				seed = GDT.Contract.getSeed(settings)
+				random = new MersenneTwister(seed)
+				count = Math.max(max - 1, Math.floor(random.random() * max))
+				results = []
+				if settings.seed isnt seed
+					settings.topics = undefined
+					settings.researchedTopics = undefined
+					settings.excludes = undefined
+					settings.platforms = undefined
+				if not settings.topics or (not settings.researchedTopics or not settings.platforms)
+					topics = company.topics.slice()
+					topics.addRange(General.getTopicsAvailableForResearch(company))
+					settings.topics = topics.map((t) ->
+						t.id
+					)
+					researchedTopics = company.topics.map((t) ->
+						t.id
+					)
+					settings.researchedTopics = researchedTopics
+					platforms =
+						Platforms.getPlatformsOnMarket(company).filter((p) ->
+							not p.isCustom and Platforms.doesPlatformSupportGameSize(p, "medium")
+						)
+					settings.platforms = platforms.map((p) ->
+						p.id
+					)
+					settings.excludes = []
+					lastGame = company.gameLog.last()
+					if lastGame
+						settings.excludes.push {
+							genre: lastGame.genre.id
+							topic: lastGame.topic.id
+						}
+				else
+					topics = settings.topics.map((id) ->
+						Topics.topics.first((t) ->
+							t.id is id
+						)
+					)
+					researchedTopics = settings.researchedTopics.map((id) ->
+						Topics.topics.first((t) ->
+							t.id is id
+						)
+					)
+					allPlatforms = Platforms.getPlatforms(company, true);
+					platforms = settings.platforms.map((id) ->
+						allPlatforms.first((p) ->
+							p.id is id
+						)
+					)
+				excludes = settings.excludes.slice()
+				count = Math.max(max - 1, Math.floor(random.random() * max))
+				if settings.initialSetting then count = Math.max(1, count)
+				sizes = ['medium']
+				if company.canDevelopLargeGames() then sizes.addRange(["large", "large", "large"])
+				audiences = ["young", "everyone", "mature"]
+				sizeBasePay = { medium: 15e4, large: 15e5 / 2 }
+				for i in [0..count]
+					publisher = GDT.Publisher.getAvailable(company).pickRandom(random)
+					if publisher.generateCard
+						item = publisher.generateCard(company)
+						topic = item.topic
+						genre = item.genre
+						platform = item.platform
+						name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+						results.push {
+							id: 'publisherContracts'
+							refNumber: Math.floor(Math.random() * 65535)
+							type: 'gameContract'
+							name: name
+							description: "Publisher: #{publisher.name}"
+							publisher: publisher.name
+							publisherObject: publisher
+							topic: if topic then topic.id else topic
+							genre: if genre then genre.id else genre
+							platform: if platform then platform.id else undefined
+							gameSize: item.size,
+							gameAudience: item.audience,
+							minScore: item.minScore,
+							payment: item.pay,
+							penalty: item.penalty,
+							royaltyRate: item.royaltyRate
+						}
+					else
+						diffculty = 0
+						topic = undefined
+						genre = undefined
+						if random.random() <= 0.7
+							genre = General.getAvailableGenres(company).pickRandom(random)
+							diffculty += 0.1
+						if random.random() <= 0.7
+							`do {
+								if (random.random() <= 0.7)
+									topic = topics.except(researchedTopics).pickRandom(random);
+								else
+									topic = topics.pickRandom(random);
+								if (topic === undefined)
+									break
+							} while (excludes.some(function (e) {
+								return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
+							}))`
+							if topic? then diffculty += 0.1
+						if genre or topic then excludes.push {
+								genre: if genre then genre.id else undefined
+								topic: if topic then topic.id else undefined
+							}
+						platform = undefined
+						if random.random() <= 0.7 then platform = platforms.pickRandom(random)
+						audience = undefined
+						if company.canSetTargetAudience() and  random.random() <= 0.2 then audience = audiences.pickRandom(random)
+						difficulty += 0.8 * random.random()
+						minScore = 4 + Math.floor(5 * difficulty)
+						size = undefined
+						`do
+							size = sizes.pickRandom(random);
+						while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size))`
+						basePay = sizeBasePay[size]
+						pay = Math.max(1, Math.floor((basePay * (minScore / 10))/5e3)) * 5e3
+						penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random())/5e3) * 5e3
+						pubObject = undefined
+						puName = undefined
+						if platform and (platform.company and random.random() <= 0.2) then pubName = platform.company
+						else
+							pubObject = publishers.pickRandom(random)
+							pubName = pubObject.name
+						royaltyRate = Math.floor(7 + 8 * difficulty) / 100
+						name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+						if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
+							results.push {
+								id: "publisherContracts"
+								refNumber: Math.floor(Math.random() * 65535)
+								type: "gameContract"
+								name: name
+								description: "Publisher: {0}".localize().format(pubName)
+								publisher: pubName
+								publisherObject: pubObject
+								topic: if topic then topic.id else topic
+								genre: if genre then genre.id else genre
+								platform: if platform then platform.id else undefined
+								gameSize: size
+								gameAudience: audience
+								minScore: minScore
+								payment: pay
+								penalty: penalty
+								royaltyRate: royaltyRate
+							}
+						else
+							count++
+				results
+		}
+	)()
+
+
+	GDT
+)()
+
 
 
 ###
@@ -1069,9 +1569,9 @@ SDP.Storage = ((s)->
 
 	s
 )(SDP.Storage or {})
-####
+###
 GRAPHICAL
-####
+###
 ###
 Implements many common graphical functionalities of UltimateLib, allows easy conversion from UltimateLib
 ###
@@ -1207,7 +1707,7 @@ SDP.GDT.Internal = {}
 SDP.GDT.Internal.notificationsToTrigger = []
 
 ###
-Triggers all notifications in the case they couldn't be triggered before (ie: before the GameManager.company.notification existed
+Triggers all notifications in the situation they couldn't be triggered before (ie: before the GameManager.company.notification existed
 ###
 GDT.on(GDT.eventKeys.saves.loaded, ->
 	GameManager.company.notifications.push(i) for i in SDP.GDT.Internal.notificationsToTrigger
@@ -1582,17 +2082,32 @@ Reviews.getReviews = (game, finalScore, positiveMessages, negativeMessages) ->
 	return reviews
 
 ###
-Appends company field to Game object
+Modifies GDT classes to make all objects indepedent of GameManager.company
 ###
-(->
-	oldGame = Game.prototype
-	oldGameConstructor = Game
+( ->
+	oldGame = Game::
+	oldGameConst = Game
 	Game = (company) ->
-		oldGameConstructor.call(@, company)
+		oldGameConst.call(@, company)
 		@company = company
 		return
 
-	Game.prototype = oldGame
+	Game:: = oldGame
+)()
+
+( ->
+	oldChar = Character::
+	oldCharConst = Character
+	Character = (options) ->
+		oldCharConst.call(@, options)
+		@company = options.company or SDP.GDT.Company.getAllCompanies()[options.uid] or SDP.GDT.Company.getClientCompany()
+		return
+
+	Character:: = oldChar
+
+	oldSave = Character::save
+	Character::save = ->
+		oldSave.call(@).companyId = @company.uid
 )()
 
 ###

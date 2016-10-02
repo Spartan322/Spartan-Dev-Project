@@ -19,9 +19,9 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] publishDate The release date of the platform
 @attribute [String] retireDate The retire date of the platform
 @attribute [Integer] devCost The dev cost for developing on the platform
-@attribute [Integer] techLevel The tech level of the platform (1-9, determines how ingenious games and the platform is)
+@attribute [Integer] techLevel The tech level of the platform (1-9, determines how ingenious the platform and the games for it will be)
 @attribute [String] iconUri The icon refered to for the icon of the platform (or base uri if contains imageDates)
-@attribute [Array {String date, Float amount}] marketKeyPoints The key date points of the market in which the units sold change to the amount
+@attribute [Array {String date, Float amount}] marketPoints The key date points of the market in which the units sold change to the amount
 @attribute [Array [6 Float]] genreWeight The weightings per genre based on SDP.Constants.Genre
 @attribute [Array [3 Float]] audienceWeight The weightings per audience based on SDP.Constants.Audience
 @optional @attribute [Array [String]] imageDates The dates for the platform image to change
@@ -827,6 +827,13 @@ SDP.Util = (function() {
     }
     return void 0;
   };
+  util.fixItemNaming = function(item, originalName, fixName) {
+    if (item[originalName] != null) {
+      item[fixName] = item[originalName];
+      item[originalName] = void 0;
+    }
+    return item;
+  };
   util.Image = (function() {
     function Image(uri1) {
       this.uri = uri1;
@@ -1061,7 +1068,7 @@ SDP.Util = (function() {
         return "Level " + level + " does not exist";
       }
       if (logger.enabled && logger.stream && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
-        return logger.stream.write(logger.format(level, msg, (createTimestamp(new Date())) + "|"));
+        return logger.stream.write(logger.format(level, msg, "[" + (createTimestamp(new Date())) + "]"));
       }
     };
     return logger;
@@ -1078,9 +1085,6 @@ SDP.Constants = {
 SDP.Functional = {};
 
 SDP.Functional.addResearchItem = function(item) {
-  if ((SDP.GDT.Research != null) && item instanceof SDP.GDT.Research) {
-    item = item.toInput();
-  }
   if (item.v != null) {
     GDT.addResearchItem(item);
   } else {
@@ -1091,54 +1095,50 @@ SDP.Functional.addResearchItem = function(item) {
 };
 
 SDP.Functional.addPlatformItem = function(item) {
-  var event, k, len, point, ref;
-  if ((SDP.GDT.Platform != null) && item instanceof SDP.GDT.Platform) {
-    item = item.toInput();
-  }
-  if (item.iconUri != null) {
-    GDT.addPlatform(item);
-  } else {
-    if (Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) && Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) && Checks.checkAudienceWeightings(item.audienceWeightings) && Checks.checkGenreWeightings(item.genreWeightings) && Checks.checkDate(item.published) && Checks.checkDate(item.platformRetireDate)) {
-      if (item.marketPoints) {
-        ref = item.marketPoints;
-        for (k = 0, len = ref.length; k < len; k++) {
-          point = ref[k];
-          if (!Checks.checkDate(point.date)) {
-            return;
-          }
+  var event, fix, k, len, point, ref;
+  fix = SDP.Util.fixItemNaming;
+  fix(item, 'licensePrice', 'licencePrize');
+  fix(item, 'publishDate', 'published');
+  fix(item, 'retireDate', 'platformRetireDate');
+  fix(item, 'devCosts', 'developmentCosts');
+  fix(item, 'genreWeight', 'genreWeightings');
+  fix(item, 'audienceWeight', 'audienceWeightings');
+  fix(item, 'marketPoints', 'marketKeyPoints');
+  if (Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) && Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) && Checks.checkAudienceWeightings(item.audienceWeightings) && Checks.checkGenreWeightings(item.genreWeightings) && Checks.checkDate(item.published) && Checks.checkDate(item.platformRetireDate)) {
+    if (item.marketKeyPoints) {
+      ref = item.marketKeyPoints;
+      for (k = 0, len = ref.length; k < len; k++) {
+        point = ref[k];
+        if (!Checks.checkDate(point.date)) {
+          return;
         }
       }
-      if (Checks.checkUniqueness(item.name, 'name', Companies.getAllCompanies())) {
-        SDP.GDT.addCompany(item.name).addPlatform(item);
-      } else {
-        Platforms.allPlatforms.push(item);
-      }
-      if (item.events) {
-        for (event in item.events) {
-          GDT.addEvent(event)(!(event instanceof SDP.GDT.Event) ? event.add() : void 0);
-        }
+    }
+
+    /*
+    		if Checks.checkUniqueness(item.name, 'name', Companies.getAllCompanies())
+    			SDP.GDT.addCompany(item.name).addPlatform(item)
+    		else
+     */
+    Platforms.allPlatforms.push(item);
+    if (item.events) {
+      for (event in item.events) {
+        GDT.addEvent(event);
       }
     }
   }
 };
 
 SDP.Functional.addTopicItem = function(item) {
-  if ((SDP.GDT.Topic != null) && item instanceof SDP.GDT.Topic) {
-    item = item.toInput();
-  }
-  if ((SDP.GDT.Weight != null) && item.genreWeightings instanceof SDP.GDT.Weight) {
-    item.genreWeightings = item.genreWeightings.toGenre().get();
-  }
-  if ((SDP.GDT.Weight != null) && item.audienceWeightings instanceof SDP.GDT.Weight) {
-    item.audienceWeightings = item.audienceWeightings.toAudience().get();
-  }
+  var fix;
+  fix = SDP.Util.fixItemNaming;
+  fix(item, 'genreWeight', 'genreWeightings');
+  fix(item, 'audienceWeight', 'audienceWeightings');
+  fix(item, 'overrides', 'missionOverrides');
   return GDT.addTopic(item);
 };
 
 SDP.Functional.addResearchProjectItem = function(item) {
-  if ((SDP.GDT.ResearchProject != null) && item instanceof SDP.GDT.ResearchProject) {
-    item = item.toInput();
-  }
   if (item.canResearch == null) {
     item.canResearch = (function(company) {
       return true;
@@ -1365,10 +1365,600 @@ SDP.GDT.addCompany = function(item) {
   return item;
 };
 
-
-/*
-GDT Utility: Functions which are for utility of GDT
- */
+SDP.GDT = (function() {
+  var GDT;
+  GDT = {};
+  GDT.Company = {
+    companies: {},
+    clientUid: void 0,
+    addCompany: function(company) {
+      var clientUid;
+      if (!company.uid) {
+        company.uid = GameManager.getGUID();
+      }
+      GDT.Company.companies[company.uid] = company;
+      if (company === GameManager.company) {
+        return clientUid = company.uid;
+      }
+    },
+    containsCompany: function(company) {
+      return companies[company.uid || company] != null;
+    },
+    getCompanies: function() {
+      return GDT.Company.companies.slice();
+    },
+    getClientCompany: function() {
+      return GDT.Company.companies[GDT.Company.clientUid];
+    }
+  };
+  GDT.Company.addCompany(GameManager.company);
+  GDT.ResearchProject = {
+    projects: Research.bigProjects.slice(),
+    getAll: function() {
+      return GDT.ResearchProject.projects.slice();
+    },
+    getAvailable: function(company, zone) {
+      return GDT.ResearchProject.getAll().filter(function(p) {
+        return p.targetZone === zone && p.canResearch(company);
+      });
+    }
+  };
+  General.getAvailableProjects = GDT.ResearchProject.getAvailable;
+  GDT.Training = {
+    trainings: Training.getAllTrainings(),
+    getAll: function() {
+      var item, k, len, ref, results;
+      results = [];
+      ref = GDT.Training.trainings.slice();
+      for (k = 0, len = ref.length; k < len; k++) {
+        item = ref[k];
+        if ((item.id != null) && ((item.pointsCost != null) && (item.duration != null))) {
+          item.isTraining = true;
+          results.push(item);
+        }
+      }
+      return results;
+    },
+    getAvailable: function(staff) {
+      var k, len, ref, results, t;
+      results = [];
+      ref = GDT.Training.getAll();
+      for (k = 0, len = ref.length; k < len; k++) {
+        t = ref[k];
+        if ((t.canSee && t.can(staff, staff.company) || (t.canUse == null)) || (!t.canSee && t.canUse(staff, staff.company))) {
+          results.push;
+        }
+      }
+      return results;
+    }
+  };
+  Training.getAllTrainings = GDT.Training.getAll;
+  Training.getAvailableTraining = GDT.Training.getAvailable;
+  (function() {
+    var smallContracts = [{
+			name: "Logo Animation".localize("heading"),
+			description: "Create an animation for an existing logo.".localize(),
+			tF: 1,
+			dF: 2.5,
+			rF: 1.5
+		}, {
+			name: "Character Design".localize("heading"),
+			description: "Design some game characters.".localize(),
+			tF: 1,
+			dF: 4.5,
+			rF: 1.5
+		}, {
+			name: "Playtest".localize("heading"),
+			description: "Help to playtest a game.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}, {
+			name: "Game Backdrops".localize("heading"),
+			description: "Design some simple background graphics for a game.".localize(),
+			tF: 1,
+			dF: 2,
+			rF: 1.5
+		}, {
+			name: "Setup Computers".localize("heading"),
+			description: "Install Mirconoft BOSS on computers".localize(),
+			tF: 2,
+			dF: 0.4
+		}, {
+			name: "Debug program".localize("heading"),
+			description: "Help debugging a convoluted BASE program.".localize(),
+			tF: 2,
+			dF: 0.2
+		}, {
+			name: "Spritesheet Software".localize("heading"),
+			description: "Our staff needs to be taught how to use these modern technologies.".localize(),
+			tF: 3,
+			dF: 2
+		}, {
+			name: "Library Software".localize("heading"),
+			description: "Develop a simple library management system".localize(),
+			tF: 5,
+			dF: 1
+		}];
+		var mediumContracts = [{
+			name: "Usability Study".localize("heading"),
+			description: "Perform a detailed usability study.".localize(),
+			tF: 5,
+			dF: 6.5
+		}, {
+			name: "Review Game Concept".localize("heading"),
+			description: "Review a game concept using your expertise.".localize(),
+			tF: 3,
+			dF: 8,
+			rF: 1.5
+		}, {
+			name: "Game Art".localize("heading"),
+			description: "Help out on a project with some game art".localize(),
+			tF: 5,
+			dF: 6,
+			rF: 1.5
+		}, {
+			name: "Clean up database".localize("heading"),
+			description: "Should one table really have 200 columns? Probably not.".localize(),
+			tF: 5,
+			dF: 1
+		}, {
+			name: "Accounting Software".localize("heading"),
+			description: "Develop a simple accounting software. Are those ever simple?".localize(),
+			tF: 5,
+			dF: 1
+		}, {
+			name: "Time Tracking".localize("heading"),
+			description: "Design and develop a time tracking system.".localize(),
+			tF: 3,
+			dF: 1
+		}, {
+			name: "Design a board game".localize("heading"),
+			description: "Let's see how your skills translate to traditional games.".localize(),
+			dF: 5,
+			tF: 0.2,
+			rF: 2
+		}, {
+			name: "Horoscope Generator".localize("heading"),
+			description: "Making up horoscopes is hard work. We want it automated.".localize(),
+			dF: 5,
+			tF: 1
+		}, {
+			name: "Character Dialogues".localize("heading"),
+			description: "Improve our character dialogues.".localize(),
+			dF: 5,
+			tF: 1,
+			rF: 1.4
+		}, {
+			name: "Futuristic Application".localize("heading"),
+			description: "We need an application that looks futuristic for a movie.".localize(),
+			dF: 3,
+			tF: 2,
+			rF: 1.5
+		}, {
+			name: "Vacuum Robot".localize("heading"),
+			description: "Create a revolutionary AI for a vacuum robot".localize(),
+			tF: 2,
+			dF: 1.4
+		}, {
+			name: "Website".localize("heading"),
+			description: "We just heard of this thing called internet. We want to have one.".localize(),
+			tF: 2,
+			dF: 1.3
+		}];
+		var largeContracts = [{
+			name: "Game Port".localize("heading"),
+			description: "Port a game to a different platform.".localize(),
+			tF: 3.2,
+			dF: 1.7,
+			rF: 1.2
+		}, {
+			name: "Cut Scenes".localize("heading"),
+			description: "Deliver professional cut scenes for a game.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}, {
+			name: "Space Shuttle".localize("heading"),
+			description: "Deliver part of the space shuttle control software.".localize(),
+			tF: 3,
+			dF: 2
+		}, {
+			name: "Alien Search".localize("heading"),
+			description: "Optimize our search for alien life forms using advanced AI techniques.".localize(),
+			tF: 3,
+			dF: 1.8,
+			rF: 1.3
+		}, {
+			name: "Movies".localize("heading"),
+			description: "We need your skills in our latest blockbuster production.".localize(),
+			tF: 1,
+			dF: 1,
+			rF: 1.5
+		}];
+    var generateConvertContracts;
+    generateConvertContracts = function(type) {
+      return function(e) {
+        e.size = type;
+        return e.id = e.name.replace(' ', '');
+      };
+    };
+    GDT.Contract = {
+      contracts: [],
+      getAll: function() {
+        return GDT.Contract.contracts.slice();
+      },
+      getAvailable: function(company) {
+        var c, k, len, ref, results;
+        results = [];
+        ref = GDT.Contract.getAll().filter(function(c) {
+          return (contr.isAvailable == null) || contr.isAvailable(company);
+        });
+        for (k = 0, len = ref.length; k < len; k++) {
+          c = ref[k];
+          results.push(c);
+        }
+        return results;
+      },
+      getSettings: function(company, size) {
+        var key, settings;
+        key = "contracts" + size;
+        settings = company.flags[key];
+        if (!settings) {
+          settings = {
+            id: key
+          };
+          company.flags[key] = settings;
+        }
+        return settings;
+      },
+      getSeed: function(settings) {
+        var newSeed;
+        newSeed = function() {
+          settings.seed = Math.floor(Math.random() * 65535);
+          settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3;
+          return settings.contractsDone = [];
+        };
+        if (!settings.seed) {
+          newSeed();
+          settings.intialSettings = true;
+        } else if (settings.expireBy <= GameManager.gameTime) {
+          newSeed();
+          settings.intialSettings = false;
+        }
+        return settings.seed;
+      },
+      createFromTemplate: function(company, template, random) {
+        var d, minPoints, pay, penalty, pointPart, points, r, t, weeks;
+        r = random.random();
+        if (random.random > 0.8) {
+          r += random.random();
+        }
+        minPoints = (function() {
+          switch (template.size) {
+            case 'small':
+              return 11;
+            case 'medium':
+              return 30;
+            case 'large':
+              return 100;
+          }
+        })();
+        if (minPoints === 12 && company.staff.length > 2) {
+          minPoints += 6;
+        }
+        minPoints += minPoints * (company.getCurrentDate().year / 25);
+        points = minPoints + minPoints * r;
+        pointPart = points / (template.dF + template.tF);
+        d = pointPart * template.dF;
+        t = pointPart * template.tF;
+        d += d * 0.2 * random.random() * random.randomSign();
+        t += t * 0.2 * random.random() * random.randomSign();
+        d = Math.floor(d);
+        t = Math.floor(t);
+        pay = Math.floor(points * 1e3 / 1e3) * 1e3;
+        weeks = template.size === small ? Math.floor(3 + 3 * random.random()) : Math.floor(3 + 7 * random.random());
+        penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random()) / 1e3) * 1e3;
+        return {
+          name: template.name,
+          description: template.description,
+          id: 'genericContracts',
+          requiredD: d,
+          requiredT: t,
+          spawnedD: 0,
+          spawnedT: 0,
+          payment: pay,
+          penalty: -penalty,
+          weeksToFinish: weeks,
+          rF: template.rF,
+          isGeneric: true,
+          size: template.size
+        };
+      },
+      generate: function(company, size, max) {
+        var contractInstance, count, i, item, random, results, set, settings;
+        settings = GDT.Contract.getSettings(company, size);
+        random = new MersenneTwister(GDT.Contract.getSeed(settings));
+        count = Math.max(max - 1, Math.floor(random.random() * max));
+        results = [];
+        set = GDT.Contract.getAvailable(company).filter(function(e) {
+          return e.size === size;
+        });
+        if (settings.initialSettings) {
+          count = Math.max(1, count);
+        }
+        i = 0;
+        while (i < count && set.length > 0) {
+          item = set.pickRandom(random);
+          set.remove(item);
+          contractInstance = GDT.Contract.createFromTemplate(company, item, random);
+          contractInstance.index = i;
+          if (settings.contractsDone && settings.contractsDone.indexOf(i) !== -1) {
+            contract.skip = true;
+          }
+          contracts.push(contract);
+          i++;
+        }
+        return contracts;
+      },
+      getList: function(company) {
+        var results, settings;
+        settings = GDT.Contract.getSettings(company, 'small');
+        results = GDT.Contract.generate(company, 'small', 4);
+        if (company.flags.mediumContractsEnabled) {
+          results.addRange(GDT.Contract.generate(company, 'medium', 3));
+        }
+        if (company.flags.largeContractsEnabled) {
+          results.addRange(GDT.Contract.generate(company, 'large', 2));
+        }
+        return results.shuffle(new MersenneTwister(GDT.Contract.getSeed(settings))).filter(function(c) {
+          return !c.skip;
+        });
+      }
+    };
+    smallContracts.forEach(generateConvertContracts('small'));
+    mediumContracts.forEach(generateConvertContracts('medium'));
+    largeContracts.forEach(generateConvertContracts('large'));
+    GDT.Contract.contracts.addRange(smallContracts);
+    GDT.Contract.contracts.addRange(mediumContracts);
+    GDT.Contract.contracts.addRange(largeContracts);
+    return ProjectContracts.generateContracts.getContract = GDT.Contract.getList;
+  })();
+  (function() {
+    var publishers = [{
+			id: "ActiveVisionaries",
+			name: "Active Visionaries"
+		}, {
+			id: "ea",
+			name: "Electronic Mass Productions"
+		}, {
+			id: "RockvilleSoftworks",
+			name: "Rockville Softworks"
+		}, {
+			id: "BlueBitGames",
+			name: "Blue Bit Games"
+		}, {
+			id: "CapeCom",
+			name: "CapeCom"
+		}, {
+			id: "Codemeisters",
+			name: "Codemeisters"
+		}, {
+			id: "DeepPlatinum",
+			name: "Deep Platinum"
+		}, {
+			id: "InfroGames",
+			name: "InfroGames"
+		}, {
+			id: "LoWoodProductions",
+			name: "LoWood Productions"
+		}, {
+			id: "TGQ",
+			name: "TGQ"
+		}, {
+			id: "\u00dcberSoft",
+			name: "\u00dcberSoft"
+		}];
+    return GDT.Publisher = {
+      publishers: publishers.slice(),
+      getAll: function() {
+        return GDT.Publisher.publishers.slice();
+      },
+      getAvailable: function(company) {
+        var c, k, len, ref, results;
+        results = [];
+        ref = GDT.Publisher.getAll().filter(function(c) {
+          return (contr.isAvailable == null) || contr.isAvailable(company);
+        });
+        for (k = 0, len = ref.length; k < len; k++) {
+          c = ref[k];
+          results.push(c);
+        }
+        return results;
+      },
+      generate: function(company, max) {
+        var allPlatforms, audience, audiences, basePay, count, diffculty, excludes, genre, i, item, k, lastGame, minScore, name, pay, penalty, platform, platforms, puName, pubName, pubObject, publisher, random, ref, researchedTopics, results, royaltyRate, seed, settings, size, sizeBasePay, sizes, topic, topics;
+        settings = GDT.Contract.getSettings(company, size);
+        seed = GDT.Contract.getSeed(settings);
+        random = new MersenneTwister(seed);
+        count = Math.max(max - 1, Math.floor(random.random() * max));
+        results = [];
+        if (settings.seed !== seed) {
+          settings.topics = void 0;
+          settings.researchedTopics = void 0;
+          settings.excludes = void 0;
+          settings.platforms = void 0;
+        }
+        if (!settings.topics || (!settings.researchedTopics || !settings.platforms)) {
+          topics = company.topics.slice();
+          topics.addRange(General.getTopicsAvailableForResearch(company));
+          settings.topics = topics.map(function(t) {
+            return t.id;
+          });
+          researchedTopics = company.topics.map(function(t) {
+            return t.id;
+          });
+          settings.researchedTopics = researchedTopics;
+          platforms = Platforms.getPlatformsOnMarket(company).filter(function(p) {
+            return !p.isCustom && Platforms.doesPlatformSupportGameSize(p, "medium");
+          });
+          settings.platforms = platforms.map(function(p) {
+            return p.id;
+          });
+          settings.excludes = [];
+          lastGame = company.gameLog.last();
+          if (lastGame) {
+            settings.excludes.push({
+              genre: lastGame.genre.id,
+              topic: lastGame.topic.id
+            });
+          }
+        } else {
+          topics = settings.topics.map(function(id) {
+            return Topics.topics.first(function(t) {
+              return t.id === id;
+            });
+          });
+          researchedTopics = settings.researchedTopics.map(function(id) {
+            return Topics.topics.first(function(t) {
+              return t.id === id;
+            });
+          });
+          allPlatforms = Platforms.getPlatforms(company, true);
+          platforms = settings.platforms.map(function(id) {
+            return allPlatforms.first(function(p) {
+              return p.id === id;
+            });
+          });
+        }
+        excludes = settings.excludes.slice();
+        count = Math.max(max - 1, Math.floor(random.random() * max));
+        if (settings.initialSetting) {
+          count = Math.max(1, count);
+        }
+        sizes = ['medium'];
+        if (company.canDevelopLargeGames()) {
+          sizes.addRange(["large", "large", "large"]);
+        }
+        audiences = ["young", "everyone", "mature"];
+        sizeBasePay = {
+          medium: 15e4,
+          large: 15e5 / 2
+        };
+        for (i = k = 0, ref = count; 0 <= ref ? k <= ref : k >= ref; i = 0 <= ref ? ++k : --k) {
+          publisher = GDT.Publisher.getAvailable(company).pickRandom(random);
+          if (publisher.generateCard) {
+            item = publisher.generateCard(company);
+            topic = item.topic;
+            genre = item.genre;
+            platform = item.platform;
+            name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
+            results.push({
+              id: 'publisherContracts',
+              refNumber: Math.floor(Math.random() * 65535),
+              type: 'gameContract',
+              name: name,
+              description: "Publisher: " + publisher.name,
+              publisher: publisher.name,
+              publisherObject: publisher,
+              topic: topic ? topic.id : topic,
+              genre: genre ? genre.id : genre,
+              platform: platform ? platform.id : void 0,
+              gameSize: item.size,
+              gameAudience: item.audience,
+              minScore: item.minScore,
+              payment: item.pay,
+              penalty: item.penalty,
+              royaltyRate: item.royaltyRate
+            });
+          } else {
+            diffculty = 0;
+            topic = void 0;
+            genre = void 0;
+            if (random.random() <= 0.7) {
+              genre = General.getAvailableGenres(company).pickRandom(random);
+              diffculty += 0.1;
+            }
+            if (random.random() <= 0.7) {
+              do {
+								if (random.random() <= 0.7)
+									topic = topics.except(researchedTopics).pickRandom(random);
+								else
+									topic = topics.pickRandom(random);
+								if (topic === undefined)
+									break
+							} while (excludes.some(function (e) {
+								return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
+							}));
+              if (topic != null) {
+                diffculty += 0.1;
+              }
+            }
+            if (genre || topic) {
+              excludes.push({
+                genre: genre ? genre.id : void 0,
+                topic: topic ? topic.id : void 0
+              });
+            }
+            platform = void 0;
+            if (random.random() <= 0.7) {
+              platform = platforms.pickRandom(random);
+            }
+            audience = void 0;
+            if (company.canSetTargetAudience() && random.random() <= 0.2) {
+              audience = audiences.pickRandom(random);
+            }
+            difficulty += 0.8 * random.random();
+            minScore = 4 + Math.floor(5 * difficulty);
+            size = void 0;
+            do
+							size = sizes.pickRandom(random);
+						while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size));
+            basePay = sizeBasePay[size];
+            pay = Math.max(1, Math.floor((basePay * (minScore / 10)) / 5e3)) * 5e3;
+            penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random()) / 5e3) * 5e3;
+            pubObject = void 0;
+            puName = void 0;
+            if (platform && (platform.company && random.random() <= 0.2)) {
+              pubName = platform.company;
+            } else {
+              pubObject = publishers.pickRandom(random);
+              pubName = pubObject.name;
+            }
+            royaltyRate = Math.floor(7 + 8 * difficulty) / 100;
+            name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
+            if (!platform || Platforms.getPlatformsOnMarket(company).first(function(p) {
+              return p.id === platform.id;
+            })) {
+              results.push({
+                id: "publisherContracts",
+                refNumber: Math.floor(Math.random() * 65535),
+                type: "gameContract",
+                name: name,
+                description: "Publisher: {0}".localize().format(pubName),
+                publisher: pubName,
+                publisherObject: pubObject,
+                topic: topic ? topic.id : topic,
+                genre: genre ? genre.id : genre,
+                platform: platform ? platform.id : void 0,
+                gameSize: size,
+                gameAudience: audience,
+                minScore: minScore,
+                payment: pay,
+                penalty: penalty,
+                royaltyRate: royaltyRate
+              });
+            } else {
+              count++;
+            }
+          }
+        }
+        return results;
+      }
+    };
+  })();
+  return GDT;
+})();
 
 
 /*
@@ -1597,7 +2187,10 @@ SDP.Storage = (function(s) {
   return s;
 })(SDP.Storage || {});
 
-GRAPHICAL;
+
+/*
+GRAPHICAL
+ */
 
 
 /*
@@ -1789,7 +2382,7 @@ SDP.GDT.Internal.notificationsToTrigger = [];
 
 
 /*
-Triggers all notifications in the case they couldn't be triggered before (ie: before the GameManager.company.notification existed
+Triggers all notifications in the situation they couldn't be triggered before (ie: before the GameManager.company.notification existed
  */
 
 GDT.on(GDT.eventKeys.saves.loaded, function() {
@@ -2417,18 +3010,33 @@ Reviews.getReviews = function(game, finalScore, positiveMessages, negativeMessag
 
 
 /*
-Appends company field to Game object
+Modifies GDT classes to make all objects indepedent of GameManager.company
  */
 
 (function() {
-  var Game, oldGame, oldGameConstructor;
+  var Game, oldGame, oldGameConst;
   oldGame = Game.prototype;
-  oldGameConstructor = Game;
+  oldGameConst = Game;
   Game = function(company) {
-    oldGameConstructor.call(this, company);
+    oldGameConst.call(this, company);
     this.company = company;
   };
   return Game.prototype = oldGame;
+})();
+
+(function() {
+  var Character, oldChar, oldCharConst, oldSave;
+  oldChar = Character.prototype;
+  oldCharConst = Character;
+  Character = function(options) {
+    oldCharConst.call(this, options);
+    this.company = options.company || SDP.GDT.Company.getAllCompanies()[options.uid] || SDP.GDT.Company.getClientCompany();
+  };
+  Character.prototype = oldChar;
+  oldSave = Character.prototype.save;
+  return Character.prototype.save = function() {
+    return oldSave.call(this).companyId = this.company.uid;
+  };
 })();
 
 
