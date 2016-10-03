@@ -941,16 +941,78 @@ SDP.GDT = ( ->
 		containsCompany: (company) -> companies[company.uid or company]?
 		getCompanies: -> GDT.Company.companies.slice()
 		getClientCompany: -> GDT.Company.companies[GDT.Company.clientUid]
+		getPlatformsFor: (company, includeInactive) ->
+			if includeInactive then return GDT.Platform.getAll().concat(company.licencedPlatforms)
+			company.availablePlatforms.concat(company.licencedPlatforms)
+		getByUid: (uid) -> GDT.Company.companes[uid]
 	}
 	GDT.Company.addCompany(GameManager.company)
+	Platforms.getPlatforms = GDT.Company.getPlatformsFor
+
+	oldResearchGetAll = Research.getAllItems
+	GDT.Research = {
+		researches: oldResearchGetAll().forEach((r) ->
+			switch r.category
+				when 'General' then r.type = 'basic'
+				when 'Game Design', 'Project Management', 'Technology', 'Publishing' then r.type = 'special'
+				else r.type = 'engine'
+			if r.id is 'Text Based' or r.id is '2D Graphics V1' or r.id is 'Basic Sound' then r.type = 'start'
+			if r.id is '2D Graphics V2' or r.id is 'Linear story' or r.id is 'Savegame' then r.engineStart = true
+		)
+		# start research is accessible without an engine
+		# basic research are researches that do not pertain specifically to engines
+		# engine research are researches that do pertain to engines
+		# special research is basically the misc, where it would fit nowhere else, for example Marketing
+		types: ['start', 'basic', 'engine', 'special']
+
+		getAll: -> GDT.Research.researches.concat(oldResearchGetAll().except(GDT.Research.researches))
+		getAvailable: (company, engine) -> GDT.Research.getAll().filter((r) ->
+				if r.type is 'start' then return true
+				if engine and engine.parts.first((e) -> e.id is r.id)? then return true
+				if r.enginePoints is 0 and company.researchCompleted.indexOf(r) isnt -1 then return true
+				if company.specialItems.indexOf(r) isnt -1 then return true
+				false
+			)
+		getAvailableEngineParts: (company) ->
+			if company.canDevelopEngine() then return GDT.Research.getAll().filter((r) ->
+				if r.engineStart then return true
+				if r.type is 'start' or r.type is 'basic' then return false
+				Research.getEnginePoints(r) isnt 0 and (Research.getEngineCost(r) isnt 0 and company.researchCompleted.indexOf(r) isnt -1)
+			)
+			[]
+		addSpecialItem: (company, idOrObj) -> company.specialItems.push(if SDP.Util.isString(idOrObj) then GDT.Researches.getAll().first((r) -> r.id is idOrObj) else idOrObj)
+		removeSpecialItem: (company, idOrObj) -> company.specialItems.remove(if SDP.Util.isString(idOrObj) then GDT.Researches.getAll().first((r) -> r.id is idOrObj) else idOrObj)
+		getById: (id) -> GDT.Research.getAll().first((r) -> r.id is id)
+	}
+	Research.getAllItems = GDT.Research.getAll
+	GameManager.getAvailableGameFeatures = GDT.Research.getAvailable
+	General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts
+
+	GDT.Platform = {
+		platforms: Platforms.allPlatforms
+		getAll: -> GDT.Platform.platforms.slice()
+		getAvailable: (company) ->
+			GDT.Company.getPlatformsFor(company).filter((p) ->
+				Platforms.getRetireDate(p) > Math.floor(company.currentWeek) and not p.isCustom or p.isCustom is true and (company.currentWeek > General.getWeekFromDateString(p.published) and not p.soldOut)
+			)
+		getById: (id) -> GDT.Platform.getAll().first((p) -> p.id is id)
+	}
+	Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable
+
+	GDT.Topic = {
+		topics: Topics.topics
+		getAll: -> GDT.Topic.topics.slice()
+		getById: (id) -> GDT.Topic.getAll().first((t) -> t.id is id )
+	}
 
 	GDT.ResearchProject = {
-		projects: Research.bigProjects.slice()
+		projects: Research.bigProjects
 		getAll: -> GDT.ResearchProject.projects.slice()
 		getAvailable: (company, zone) ->
 			GDT.ResearchProject.getAll().filter((p) ->
 				p.targetZone is zone and p.canResearch(company)
 			)
+		getById: (id) -> GDT.ResearchProject.getAll().first((r) -> r.id is id)
 	}
 	General.getAvailableProjects = GDT.ResearchProject.getAvailable
 
@@ -968,6 +1030,7 @@ SDP.GDT = ( ->
 			for t in GDT.Training.getAll()
 				results.push if (t.canSee and t.can(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
 			results
+		getById: (id) -> GDT.Training.getAll().first((t) -> t.id is id)
 	}
 	Training.getAllTrainings = GDT.Training.getAll
 	Training.getAvailableTraining = GDT.Training.getAvailable
@@ -1205,6 +1268,7 @@ SDP.GDT = ( ->
 				if company.flags.mediumContractsEnabled then results.addRange(GDT.Contract.generate(company, 'medium', 3))
 				if company.flags.largeContractsEnabled then results.addRange(GDT.Contract.generate(company, 'large', 2))
 				results.shuffle(new MersenneTwister(GDT.Contract.getSeed(settings))).filter((c) -> not c.skip)
+			getById: (id) -> GDT.Contract.getAll().first((c) -> c.id is id)
 		}
 		smallContracts.forEach(generateConvertContracts('small'))
 		mediumContracts.forEach(generateConvertContracts('medium'))
@@ -1410,6 +1474,7 @@ SDP.GDT = ( ->
 						else
 							count++
 				results
+			getById: (id) -> GDT.Publisher.getAll().first((p) -> p.id is id)
 		}
 	)()
 

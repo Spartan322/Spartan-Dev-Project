@@ -1366,7 +1366,7 @@ SDP.GDT.addCompany = function(item) {
 };
 
 SDP.GDT = (function() {
-  var GDT;
+  var GDT, oldResearchGetAll;
   GDT = {};
   GDT.Company = {
     companies: {},
@@ -1389,17 +1389,139 @@ SDP.GDT = (function() {
     },
     getClientCompany: function() {
       return GDT.Company.companies[GDT.Company.clientUid];
+    },
+    getPlatformsFor: function(company, includeInactive) {
+      if (includeInactive) {
+        return GDT.Platform.getAll().concat(company.licencedPlatforms);
+      }
+      return company.availablePlatforms.concat(company.licencedPlatforms);
+    },
+    getByUid: function(uid) {
+      return GDT.Company.companes[uid];
     }
   };
   GDT.Company.addCompany(GameManager.company);
+  Platforms.getPlatforms = GDT.Company.getPlatformsFor;
+  oldResearchGetAll = Research.getAllItems;
+  GDT.Research = {
+    researches: oldResearchGetAll().forEach(function(r) {
+      switch (r.category) {
+        case 'General':
+          r.type = 'basic';
+          break;
+        case 'Game Design':
+        case 'Project Management':
+        case 'Technology':
+        case 'Publishing':
+          r.type = 'special';
+          break;
+        default:
+          r.type = 'engine';
+      }
+      if (r.id === 'Text Based' || r.id === '2D Graphics V1' || r.id === 'Basic Sound') {
+        r.type = 'start';
+      }
+      if (r.id === '2D Graphics V2' || r.id === 'Linear story' || r.id === 'Savegame') {
+        return r.engineStart = true;
+      }
+    }),
+    types: ['start', 'basic', 'engine', 'special'],
+    getAll: function() {
+      return GDT.Research.researches.concat(oldResearchGetAll().except(GDT.Research.researches));
+    },
+    getAvailable: function(company, engine) {
+      return GDT.Research.getAll().filter(function(r) {
+        if (r.type === 'start') {
+          return true;
+        }
+        if (engine && (engine.parts.first(function(e) {
+          return e.id === r.id;
+        }) != null)) {
+          return true;
+        }
+        if (r.enginePoints === 0 && company.researchCompleted.indexOf(r) !== -1) {
+          return true;
+        }
+        if (company.specialItems.indexOf(r) !== -1) {
+          return true;
+        }
+        return false;
+      });
+    },
+    getAvailableEngineParts: function(company) {
+      if (company.canDevelopEngine()) {
+        return GDT.Research.getAll().filter(function(r) {
+          if (r.engineStart) {
+            return true;
+          }
+          if (r.type === 'start' || r.type === 'basic') {
+            return false;
+          }
+          return Research.getEnginePoints(r) !== 0 && (Research.getEngineCost(r) !== 0 && company.researchCompleted.indexOf(r) !== -1);
+        });
+      }
+      return [];
+    },
+    addSpecialItem: function(company, idOrObj) {
+      return company.specialItems.push(SDP.Util.isString(idOrObj) ? GDT.Researches.getAll().first(function(r) {
+        return r.id === idOrObj;
+      }) : idOrObj);
+    },
+    removeSpecialItem: function(company, idOrObj) {
+      return company.specialItems.remove(SDP.Util.isString(idOrObj) ? GDT.Researches.getAll().first(function(r) {
+        return r.id === idOrObj;
+      }) : idOrObj);
+    },
+    getById: function(id) {
+      return GDT.Research.getAll().first(function(r) {
+        return r.id === id;
+      });
+    }
+  };
+  Research.getAllItems = GDT.Research.getAll;
+  GameManager.getAvailableGameFeatures = GDT.Research.getAvailable;
+  General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts;
+  GDT.Platform = {
+    platforms: Platforms.allPlatforms,
+    getAll: function() {
+      return GDT.Platform.platforms.slice();
+    },
+    getAvailable: function(company) {
+      return GDT.Company.getPlatformsFor(company).filter(function(p) {
+        return Platforms.getRetireDate(p) > Math.floor(company.currentWeek) && !p.isCustom || p.isCustom === true && (company.currentWeek > General.getWeekFromDateString(p.published) && !p.soldOut);
+      });
+    },
+    getById: function(id) {
+      return GDT.Platform.getAll().first(function(p) {
+        return p.id === id;
+      });
+    }
+  };
+  Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable;
+  GDT.Topic = {
+    topics: Topics.topics,
+    getAll: function() {
+      return GDT.Topic.topics.slice();
+    },
+    getById: function(id) {
+      return GDT.Topic.getAll().first(function(t) {
+        return t.id === id;
+      });
+    }
+  };
   GDT.ResearchProject = {
-    projects: Research.bigProjects.slice(),
+    projects: Research.bigProjects,
     getAll: function() {
       return GDT.ResearchProject.projects.slice();
     },
     getAvailable: function(company, zone) {
       return GDT.ResearchProject.getAll().filter(function(p) {
         return p.targetZone === zone && p.canResearch(company);
+      });
+    },
+    getById: function(id) {
+      return GDT.ResearchProject.getAll().first(function(r) {
+        return r.id === id;
       });
     }
   };
@@ -1430,6 +1552,11 @@ SDP.GDT = (function() {
         }
       }
       return results;
+    },
+    getById: function(id) {
+      return GDT.Training.getAll().first(function(t) {
+        return t.id === id;
+      });
     }
   };
   Training.getAllTrainings = GDT.Training.getAll;
@@ -1714,6 +1841,11 @@ SDP.GDT = (function() {
         return results.shuffle(new MersenneTwister(GDT.Contract.getSeed(settings))).filter(function(c) {
           return !c.skip;
         });
+      },
+      getById: function(id) {
+        return GDT.Contract.getAll().first(function(c) {
+          return c.id === id;
+        });
       }
     };
     smallContracts.forEach(generateConvertContracts('small'));
@@ -1954,6 +2086,11 @@ SDP.GDT = (function() {
           }
         }
         return results;
+      },
+      getById: function(id) {
+        return GDT.Publisher.getAll().first(function(p) {
+          return p.id === id;
+        });
       }
     };
   })();
