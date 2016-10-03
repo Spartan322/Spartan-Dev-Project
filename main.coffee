@@ -1001,8 +1001,12 @@ SDP.GDT = ( ->
 
 	GDT.Topic = {
 		topics: Topics.topics
+		_topicBackup: JSON.parse(JSON.stringify(GDT.Topic.topics))
 		getAll: -> GDT.Topic.topics.slice()
 		getById: (id) -> GDT.Topic.getAll().first((t) -> t.id is id )
+		reset: (id) ->
+			index = GDT.Topic.topics.indexOf(GDT.Topic.getById(id))
+			if index isnt -1 then GDT.Topic.topics[index] = JSON.parse(JSON.stringify(GDT.Topic._topicBackup[index]))
 	}
 
 	GDT.ResearchProject = {

@@ -1500,6 +1500,7 @@ SDP.GDT = (function() {
   Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable;
   GDT.Topic = {
     topics: Topics.topics,
+    _topicBackup: JSON.parse(JSON.stringify(GDT.Topic.topics)),
     getAll: function() {
       return GDT.Topic.topics.slice();
     },
@@ -1507,6 +1508,13 @@ SDP.GDT = (function() {
       return GDT.Topic.getAll().first(function(t) {
         return t.id === id;
       });
+    },
+    reset: function(id) {
+      var index;
+      index = GDT.Topic.topics.indexOf(GDT.Topic.getById(id));
+      if (index !== -1) {
+        return GDT.Topic.topics[index] = JSON.parse(JSON.stringify(GDT.Topic._topicBackup[index]));
+      }
     }
   };
   GDT.ResearchProject = {
