@@ -29,10 +29,10 @@ style = (->
 
 		syncString: -> _string = styleObj.generateFormatString(_style)
 
-		format: (msg) ->
-			styleObj.format(_string, msg)
+		format: (msg...) ->
+			styleObj.format(_string, msg...)
 
-		write: (msg) ->
+		write: (msg...) ->
 			if not _stream then return
 			_stream.write(@format(msg))
 
@@ -57,16 +57,16 @@ style = (->
 		if styleObj.enableBeep and settings.beep then output += consoleControl.beep()
 		"#{output}%s"+ if styleObj.enableColor then consoleControl.color('reset') else ''
 
-	styleObj.format = (fmt, msg) ->
+	styleObj.format = (fmt, msg...) ->
 		if fmt.constructor is styleObj.FormattedStyle then fmt = fmt.getFormat()
 		else if fmt.constructor is Object then fmt = styleObj.generateFormatString(fmt)
-		util.format(fmt, msg)
+		util.format(fmt, msg...)
 
-	styleObj.write = (msg, style) ->
+	styleObj.write = (style, msg...) ->
 		if not styleObj.stream then return
-		if style.constructor is styleObj.FormattedStyle then styleObj.stream.write(style.format(msg))
-		else if style.constructor is String then styleObj.stream.write(styleObj.format(style, msg))
-		else styleObj.stream.write(styleObj.format(styleObj.generateFormatString(style), msg))
+		if style.constructor is styleObj.FormattedStyle then styleObj.stream.write(style.format(msg...))
+		else if style.constructor is String then styleObj.stream.write(styleObj.format(style, msg...))
+		else styleObj.stream.write(styleObj.format(styleObj.generateFormatString(style), msg...))
 
 	styleObj
 )()

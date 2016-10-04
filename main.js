@@ -329,7 +329,7 @@ SDP.Util = (function() {
         return fsys.path.normalize(joined);
       },
       relative: function(from, to) {
-        var fromCode, fromEnd, fromLen, fromStart, i, k, l, lastCommonSep, length, o, out, ref, ref1, ref2, ref3, ref4, ref5, ref6, ref7, toCode, toEnd, toLen, toStart, u;
+        var fromCode, fromEnd, fromLen, fromStart, i, k, l, lastCommonSep, length, out, ref, ref1, ref2, ref3, ref4, ref5, ref6, ref7, toCode, toEnd, toLen, toStart, u, x;
         assertPath(from);
         assertPath(to);
         if (from === to) {
@@ -359,7 +359,7 @@ SDP.Util = (function() {
         length = fromLen < toLen ? fromLen : toLen;
         lastCommonSep = -1;
         i = 0;
-        for (i = o = ref4 = i, ref5 = length; ref4 <= ref5 ? o <= ref5 : o >= ref5; i = ref4 <= ref5 ? ++o : --o) {
+        for (i = u = ref4 = i, ref5 = length; ref4 <= ref5 ? u <= ref5 : u >= ref5; i = ref4 <= ref5 ? ++u : --u) {
           if (i === length) {
             if (toLen > length) {
               if (to.charCodeAt(toStart + i) === 47) {
@@ -385,7 +385,7 @@ SDP.Util = (function() {
           }
         }
         out = '';
-        for (i = u = ref6 = fromStart + lastCommonSep + 1, ref7 = fromEnd; ref6 <= ref7 ? u <= ref7 : u >= ref7; i = ref6 <= ref7 ? ++u : --u) {
+        for (i = x = ref6 = fromStart + lastCommonSep + 1, ref7 = fromEnd; ref6 <= ref7 ? x <= ref7 : x >= ref7; i = ref6 <= ref7 ? ++x : --x) {
           if (i === fromEnd || from.charCodeAt(i) === 47) {
             if (out.length === 0) {
               out += '..';
@@ -969,10 +969,60 @@ SDP.Util = (function() {
     return Date;
 
   })();
+  util.Error = (function() {
+    var Error;
+    Error = {
+      logs: []
+    };
+    (function() {
+      var saving, update;
+      update = false;
+      saving = false;
+      return Error.save = function() {
+        var json;
+        if (!saving) {
+          json = JSON.stringify(Error.logs);
+          saving = true;
+          return DataStore.saveToSlotAsync("SDP.Util.Error.logs", json, function() {
+            saving = false;
+            if (update) {
+              update = false;
+              return Error.save();
+            }
+          }, function(m) {
+            return saving = false;
+          });
+        } else {
+          return update = true;
+        }
+      };
+    })();
+    Error.addErrorLog = function(level, message, error) {
+      if (!error) {
+        error = {};
+      }
+      Error.logs.push({
+        date: (new Date()).toISOString(),
+        level: level,
+        msg: message,
+        errorMsg: error.message,
+        stacktrace: e.stack,
+        number: e.number
+      });
+      if (Error.logs.length > 100) {
+        Error.logs.splice(0, errorLogs.length - 100);
+      }
+      return Error.save();
+    };
+    return Error;
+  })();
   util.Logger = (function() {
-    var createTimestamp, logger, stream;
+    var createTimestamp, logger, stream, utilRequire;
+    utilRequire = require('util');
     logger = {
       enabled: true,
+      enableAlerts: true,
+      formatter: logger.printf,
       show: 200,
       levels: {},
       addLevel: function(level, weight, sty, prefix) {
@@ -987,15 +1037,32 @@ SDP.Util = (function() {
           prefix: prefix,
           style: sty,
           weight: weight,
-          format: function(msg) {
-            return logger.format(level, msg);
+          format: function() {
+            var msg;
+            msg = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+            return logger.format.apply(logger, [level].concat(slice.call(msg)));
           },
-          log: function(msg) {
-            return logger.log(level, msg);
+          formatWithTime: function() {
+            var msg;
+            msg = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+            return logger.formatWithTime.apply(logger, [level].concat(slice.call(msg)));
+          },
+          log: function() {
+            var msg;
+            msg = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+            return logger.log.apply(logger, [level].concat(slice.call(msg)));
+          },
+          alert: function() {
+            var msg;
+            msg = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+            return logger.alert.apply(logger, [level].concat(slice.call(msg)));
           }
         };
         if (logger[level] === void 0) {
-          return logger[level] = logger.levels[level].log;
+          logger[level] = logger.levels[level].log;
+        }
+        if (logger[level + "Alert"] === void 0) {
+          return logger[level + "Alert"] = logger.levels[level].alert;
         }
       },
       setShow: function(level) {
@@ -1051,27 +1118,217 @@ SDP.Util = (function() {
       };
       return [[formatNumbers(d.getFullYear()), formatNumbers(d.getMonth() + 1), d.getDate()].join("-"), [formatNumbers(d.getHours()), formatNumbers(d.getMinutes()), formatNumbers(d.getHours())].join(":")].join("|");
     };
-    logger.format = function(level, msg, prefix) {
-      if (prefix == null) {
-        prefix = '';
+    logger.printf = {
+      formatWithTime: function() {
+        var level, msg, ref;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] != null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        return style.format(level.style, "[" + (createTimestamp(new Date())) + "]" + level.prefix + ": " + ((ref = str.shift()).format.apply(ref, msg)));
+      },
+      format: function() {
+        var level, msg, ref;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] != null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        return style.format(level.style, level.prefix + ": " + ((ref = str.shift()).format.apply(ref, msg)));
+      },
+      log: function() {
+        var level, msg, ref;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] == null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        if (logger.enabled && logger.stream && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
+          return logger.stream.write(logger.printf.formatWithTime(level, msg));
+        }
+      },
+      alert: function() {
+        var level, msg, ref, ref1, string;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] == null) {
+          return "Level " + level + " does not exist";
+        }
+        if (logger.enabled && logger.enableAlerts && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
+          string = msg.length === 1 ? msg[0] : (ref1 = str.shift()).format.apply(ref1, msg);
+          return PlatformShim.alert(string, logger.levels[level].prefix);
+        }
       }
-      if (logger.levels[level] != null) {
-        level = logger.levels[level];
-      } else {
-        return "Level " + level + " does not exist";
-      }
-      return style.format(level.style, "" + prefix + level.prefix + ": " + msg);
     };
-    logger.log = function(level, msg) {
-      var ref;
-      if (logger.levels[level] == null) {
-        return "Level " + level + " does not exist";
+    logger.format = {
+      formatWithTime: function() {
+        var level, msg;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] != null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        return style.format(level.style, "[" + (createTimestamp(new Date())) + "]" + level.prefix + ": " + (utilRequire.format.apply(utilRequire, msg)));
+      },
+      format: function() {
+        var level, msg;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] != null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        return style.format(level.style, level.prefix + ": " + (utilRequire.format.apply(utilRequire, msg)));
+      },
+      log: function() {
+        var level, msg, ref;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] == null) {
+          level = logger.levels[level];
+        }
+        if (logger.levels.indexOf(level) === -1) {
+          return "Level " + level + " does not exist";
+        }
+        if (logger.enabled && logger.stream && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
+          return logger.stream.write(logger.format.formatWithTime(level, msg));
+        }
+      },
+      alert: function() {
+        var level, msg, ref, string;
+        level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        if (logger.levels[level] == null) {
+          return "Level " + level + " does not exist";
+        }
+        if (logger.enabled && logger.enableAlerts && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
+          string = msg.length === 1 ? msg[0] : utilRequire.format.apply(utilRequire, msg);
+          return PlatformShim.alert(string, logger.levels[level].prefix);
+        }
       }
-      if (logger.enabled && logger.stream && ((ref = logger.levels[level]) != null ? ref.weight : void 0) >= logger.show) {
-        return logger.stream.write(logger.format(level, msg, "[" + (createTimestamp(new Date())) + "]"));
-      }
+    };
+    logger.formatWithTime = function() {
+      var level, msg, ref;
+      level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      return (ref = logger.formatter).formatWithTime.apply(ref, [level].concat(slice.call(msg)));
+    };
+    logger.format = function() {
+      var level, msg, ref;
+      level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      return (ref = logger.formatter).format.apply(ref, [level].concat(slice.call(msg)));
+    };
+    logger.log = function() {
+      var level, msg, ref;
+      level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      return (ref = logger.formatter).log.apply(ref, [level].concat(slice.call(msg)));
+    };
+    logger.alert = function() {
+      var level, msg, ref;
+      level = arguments[0], msg = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      return (ref = logger.formatter).alert.apply(ref, [level].concat(slice.call(msg)));
     };
     return logger;
+  })();
+  util.Check = (function() {
+    var Check;
+    Check = {
+      usePopups: true
+    };
+    Check.error = function(msg) {
+      var e;
+      try {
+        throw new Error(msg);
+      } catch (error1) {
+        e = error1;
+        if (Checks.usePopups) {
+          util.Logger.errorAlert(msg, e);
+        } else {
+          util.Logger.error(msg, e);
+        }
+        return Error.addErrorLog("MODERROR", msg, e);
+      }
+    };
+    Check.audienceWeightings = function(w) {
+      if (!w || w.length < 3 || w.some(function(v) {
+        return v < 0 || v > 1;
+      })) {
+        Check.error('audience weigthing is invalid: %s', w);
+        return false;
+      }
+      return true;
+    };
+    Check.genreWeightings = function(w) {
+      if (!w || w.length < 6 || w.some(function(v) {
+        return v < 0 || v > 1;
+      })) {
+        Check.error('genre weigthing is invalid: %s', w);
+        return false;
+      }
+      return true;
+    };
+    Check.missionOverrides = function(overrides) {
+      if (overrides.length < 6 || overrides.some(function(o) {
+        return o.length < 6 || o.some(function(w) {
+          return w > 1 || w < 0;
+        });
+      })) {
+        Check.error('invalid missionOverrides: %s', w);
+        return false;
+      }
+      return true;
+    };
+    Check.date = function(date) {
+      var v;
+      if (date && date.split) {
+        v = date.split('/');
+        if (v && v.length === 3 && !v.some(function(t) {
+          return t < 1;
+        }) && v[1] <= 12 && v[2] <= 4) {
+          return true;
+        }
+        Check.error('date invalid: %s', date);
+        return false;
+      }
+    };
+    Check.propertiesPresent = function(obj, props) {
+      var k, len, p;
+      if (!obj) {
+        return false;
+      }
+      if (!props) {
+        return true;
+      }
+      for (k = 0, len = props.length; k < len; k++) {
+        p = props[k];
+        if (!p || p.length < 1) {
+          continue;
+        }
+        if (!obj.hasOwnProperty(p)) {
+          Check.error('property not set on object: %s', p);
+          return false;
+        }
+      }
+      return true;
+    };
+    Check.uniqueness = function(obj, prop, values, ignoreErr) {
+      if (values.some(function(v) {
+        return v[prop] === obj[prop];
+      })) {
+        if (!ignoreErr) {
+          Check.error('duplicate value for %s found: %s', prop, obj[prop]);
+        }
+        return false;
+      }
+      return true;
+    };
+    return Check;
   })();
   return util;
 })();
@@ -1085,17 +1342,17 @@ SDP.Constants = {
 SDP.Functional = {};
 
 SDP.Functional.addResearchItem = function(item) {
-  if (item.v != null) {
-    GDT.addResearchItem(item);
-  } else {
-    if (Checks.checkPropertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) && Checks.checkUniqueness(item, 'id', Research.getAllItems())) {
-      Research.engineItems.push(item);
-    }
+  var Checks;
+  Checks = SDP.Util.Check;
+  if (Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) && Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())) {
+    SDP.GDT.Research.researches.push(item);
+    GDT.Research.engineItems(item);
   }
 };
 
 SDP.Functional.addPlatformItem = function(item) {
-  var event, fix, k, len, point, ref;
+  var Checks, event, fix, k, len, point, ref;
+  Checks = SDP.Util.Check;
   fix = SDP.Util.fixItemNaming;
   fix(item, 'licensePrice', 'licencePrize');
   fix(item, 'publishDate', 'published');
@@ -1104,12 +1361,12 @@ SDP.Functional.addPlatformItem = function(item) {
   fix(item, 'genreWeight', 'genreWeightings');
   fix(item, 'audienceWeight', 'audienceWeightings');
   fix(item, 'marketPoints', 'marketKeyPoints');
-  if (Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) && Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) && Checks.checkAudienceWeightings(item.audienceWeightings) && Checks.checkGenreWeightings(item.genreWeightings) && Checks.checkDate(item.published) && Checks.checkDate(item.platformRetireDate)) {
+  if (Checks.propertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) && Checks.uniqueness(item, 'id', SDP.GDT.Platform.getAll()) && Checks.audienceWeightings(item.audienceWeightings) && Checks.genreWeightings(item.genreWeightings) && Checks.date(item.published) && Checks.date(item.platformRetireDate)) {
     if (item.marketKeyPoints) {
       ref = item.marketKeyPoints;
       for (k = 0, len = ref.length; k < len; k++) {
         point = ref[k];
-        if (!Checks.checkDate(point.date)) {
+        if (!Checks.date(point.date)) {
           return;
         }
       }
@@ -1120,7 +1377,7 @@ SDP.Functional.addPlatformItem = function(item) {
     			SDP.GDT.addCompany(item.name).addPlatform(item)
     		else
      */
-    Platforms.allPlatforms.push(item);
+    SDP.GDT.Platform.platforms.push(item);
     if (item.events) {
       for (event in item.events) {
         GDT.addEvent(event);
@@ -1130,22 +1387,44 @@ SDP.Functional.addPlatformItem = function(item) {
 };
 
 SDP.Functional.addTopicItem = function(item) {
-  var fix;
+  var Checks, fix;
+  Checks = SDP.Util.Check;
   fix = SDP.Util.fixItemNaming;
   fix(item, 'genreWeight', 'genreWeightings');
   fix(item, 'audienceWeight', 'audienceWeightings');
   fix(item, 'overrides', 'missionOverrides');
-  return GDT.addTopic(item);
+  if (Checks.propertiesPresent(t, ['name', 'id', 'genreWeightings', 'audienceWeightings']) && Checks.audienceWeightings(t.audienceWeightings) && Checks.genreWeightings(t.genreWeightings) && Checks.uniqueness(t, 'id', SDP.GDT.Topic.getAll(), true)) {
+    SDP.GDT.Topic.topics.push(item);
+  }
+};
+
+SDP.Functional.addTopicItems = function() {
+  var item, k, len, list, results1;
+  list = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+  if (list.length === 1) {
+    list = list[0];
+    if (!SDP.Util.isArray(list)) {
+      return SDP.Functional.addTopicItem(list);
+    }
+  }
+  results1 = [];
+  for (k = 0, len = list.length; k < len; k++) {
+    item = list[k];
+    results1.push(SDP.Functional.addTopicItem(item));
+  }
+  return results1;
 };
 
 SDP.Functional.addResearchProjectItem = function(item) {
+  var Checks;
+  Checks = SDP.Util.Check;
   if (item.canResearch == null) {
     item.canResearch = (function(company) {
       return true;
     });
   }
-  if (Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) && Checks.checkUniqueness(item, 'id', Research.bigProjects)) {
-    Research.bigProjects.push(item);
+  if (Checks.propertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) && Checks.uniqueness(item, 'id', SDP.GDT.ResearchProject.getAll())) {
+    SDP.GDT.ResearchProject.projects.push(item);
   }
 };
 
@@ -2102,7 +2381,72 @@ SDP.GDT = (function() {
       }
     };
   })();
+  GDT.ModSupport = (function() {
+    var ModSupport, oldLoad;
+    ModSupport = {};
+    oldLoad = ModSupport.loadMod;
+    ModSupport.loadMod = function(enableMods, i) {
+      SDP.Util.Logger.formatter = SDP.Util.Logger.printf;
+      return oldLoad(enableMods, i);
+    };
+    return ModSupport;
+  })();
+  ModSupport.loadMod = GDT.ModSupport.loadMod;
   return GDT;
+})();
+
+(function() {
+  SDP.ULWrapper = {};
+  if (String.prototype.endsWith == null) {
+    String.prototype.endsWith = function(a) {
+      return this.substr(this.length - a.length) === a;
+    };
+  }
+  if (String.prototype.startsWith == null) {
+    String.prototype.startsWith = function(a) {
+      return this.substr(0, a.length) === a;
+    };
+  }
+  if (Number.prototype.truncateDecimals == null) {
+    Number.prototype.truncateDecimals = function(a) {
+      var b;
+      b = this - Math.pow(10, -a) / 2;
+      b += b / Math.pow(2, 53);
+      return b.toFixed(a);
+    };
+  }
+  SDP.ULWrapper.Logger = (function() {
+    var Loggger;
+    Loggger = {
+      enabled: true
+    };
+    Logger.log = function(e, c) {
+      if (!Logger.enabled) {
+        return;
+      }
+      if (c == null) {
+        return SDP.Util.Logger.debug(e);
+      } else {
+        return SDP.Util.Logger.error(e + "\n" + c.message);
+      }
+    };
+    return Logger;
+  })();
+  SDP.ULWrapper.Contracts = (function() {
+    var Contracts;
+    Contracts = {};
+    return Contracts;
+  })();
+  SDP.ULWrapper.Publishers = (function() {
+    var Publishers;
+    Publishers = {};
+    return Publishers;
+  })();
+  return SDP.ULWrapper.Research = (function() {
+    var Research;
+    Research = {};
+    return Research;
+  })();
 })();
 
 
@@ -2278,8 +2622,8 @@ SDP.Storage = (function(s) {
           return $.jStorage.get("SDP.Storage." + storeName);
         }
       }
-    } catch (error) {
-      e = error;
+    } catch (error1) {
+      e = error1;
       log("SDP.Storage.read Local storage error occured. Error: " + e.message);
       return false;
     }
@@ -2298,8 +2642,8 @@ SDP.Storage = (function(s) {
         $.jStorage.set("SDP.Storage." + storeName);
       }
       return log("SDP.Storage.write Local storage successful at ID SDP.Storage." + f);
-    } catch (error) {
-      e = error;
+    } catch (error1) {
+      e = error1;
       log("SDP.Storage.write Local storage error occured! Error: " + e.message);
       return false;
     }

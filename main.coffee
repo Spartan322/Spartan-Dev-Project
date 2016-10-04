@@ -603,9 +603,48 @@ SDP.Util = ( ->
 		convert: ->
 			new String(@string)
 
+	util.Error = ( ->
+		Error = {
+			logs: []
+		}
+		( ->
+			update = false
+			saving = false
+			Error.save = ->
+				if not saving
+					json = JSON.stringify(Error.logs)
+					saving = true
+					DataStore.saveToSlotAsync("SDP.Util.Error.logs", json, ->
+						saving = false
+						if update
+							update = false
+							Error.save()
+					, (m) -> saving = false )
+				else update = true
+		)()
+
+		Error.addErrorLog = (level, message, error) ->
+			if not error then error = {}
+			Error.logs.push {
+				date: (new Date()).toISOString()
+				level: level
+				msg: message
+				errorMsg: error.message
+				stacktrace: e.stack
+				number: e.number
+			}
+			if Error.logs.length > 100 then Error.logs.splice(0, errorLogs.length - 100)
+			Error.save()
+
+		Error
+	)()
+
 	util.Logger = ( ->
+		utilRequire = require('util')
 		logger = {
 			enabled: true
+			enableAlerts: true
+			formatter: logger.printf
 			show: 200
 			levels: {}
 			addLevel: (level, weight, sty, prefix = level) ->
@@ -615,10 +654,13 @@ SDP.Util = ( ->
 					prefix: prefix
 					style: sty
 					weight: weight
-					format: (msg) -> logger.format(level, msg)
-					log: (msg) -> logger.log(level, msg)
+					format: (msg...) -> logger.format(level, msg...)
+					formatWithTime: (msg...) -> logger.formatWithTime(level, msg...)
+					log: (msg...) -> logger.log(level, msg...)
+					alert: (msg...) -> logger.alert(level, msg...)
 				}
 				if logger[level] is undefined then logger[level] = logger.levels[level].log
+				if logger["#{level}Alert"] is undefined then logger["#{level}Alert"] = logger.levels[level].alert
 
 			setShow: (level) ->
 				if level.constructor is Object then logger.show = level.weight
@@ -657,17 +699,122 @@ SDP.Util = ( ->
 				].join(":")
 			].join("|")
 
-		logger.format = (level, msg, prefix = '') ->
-			if logger.levels[level]? then level = logger.levels[level]
-			else return "Level #{level} does not exist"
-			style.format(level.style, "#{prefix}#{level.prefix}: #{msg}")
+		logger.printf = {
+			formatWithTime: (level, msg...) ->
+				if logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return "Level #{level} does not exist"
+				style.format(level.style, "[#{createTimestamp(new Date())}]#{level.prefix}: #{str.shift().format(msg...)}")
 
-		logger.log = (level, msg) ->
-			if not logger.levels[level]? then return "Level #{level} does not exist"
-			if logger.enabled and logger.stream and logger.levels[level]?.weight >= logger.show
-				logger.stream.write(logger.format(level, msg, "[#{createTimestamp(new Date())}]"))
+			format: (level, msg...) ->
+				if logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return "Level #{level} does not exist"
+				style.format(level.style, "#{level.prefix}: #{str.shift().format(msg...)}")
+
+			log: (level, msg...) ->
+				if not logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return  "Level #{level} does not exist"
+				if logger.enabled and logger.stream and logger.levels[level]?.weight >= logger.show
+					logger.stream.write(logger.printf.formatWithTime(level, msg))
+
+			alert: (level, msg...) ->
+				if not logger.levels[level]? then return "Level #{level} does not exist"
+				if logger.enabled and logger.enableAlerts and logger.levels[level]?.weight >= logger.show
+					string = if msg.length is 1 then msg[0] else str.shift().format(msg...)
+					PlatformShim.alert(string, logger.levels[level].prefix)
+		}
+
+		logger.format = {
+			formatWithTime: (level, msg...) ->
+				if logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return "Level #{level} does not exist"
+				style.format(level.style, "[#{createTimestamp(new Date())}]#{level.prefix}: #{utilRequire.format(msg...)}")
+
+			format: (level, msg...) ->
+				if logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return "Level #{level} does not exist"
+				style.format(level.style, "#{level.prefix}: #{utilRequire.format(msg...)}")
+
+			log: (level, msg...) ->
+				if not logger.levels[level]? then level = logger.levels[level]
+				if logger.levels.indexOf(level) is -1 then return  "Level #{level} does not exist"
+				if logger.enabled and logger.stream and logger.levels[level]?.weight >= logger.show
+					logger.stream.write(logger.format.formatWithTime(level, msg))
+
+			alert: (level, msg...) ->
+				if not logger.levels[level]? then return "Level #{level} does not exist"
+				if logger.enabled and logger.enableAlerts and logger.levels[level]?.weight >= logger.show
+					string = if msg.length is 1 then msg[0] else utilRequire.format(msg...)
+					PlatformShim.alert(string, logger.levels[level].prefix)
+		}
+
+		logger.formatWithTime = (level, msg...) ->
+			logger.formatter.formatWithTime(level, msg...)
+
+		logger.format = (level, msg...) ->
+			logger.formatter.format(level, msg...)
+
+		logger.log = (level, msg...) ->
+			logger.formatter.log(level, msg...)
+
+		logger.alert = (level, msg...) ->
+			logger.formatter.alert(level, msg...)
 
 		logger
+	)()
+
+	util.Check = ( ->
+		Check = {
+			usePopups: true
+		}
+
+		Check.error = (msg) ->
+			try throw new Error(msg)
+			catch e
+				if Checks.usePopups then util.Logger.errorAlert(msg, e) else util.Logger.error(msg, e)
+				Error.addErrorLog("MODERROR", msg, e)
+
+		Check.audienceWeightings = (w) ->
+			if not w or w.length < 3 or w.some((v) -> return v < 0 or v > 1)
+				Check.error('audience weigthing is invalid: %s', w)
+				return false
+			return true
+
+		Check.genreWeightings = (w) ->
+			if not w or w.length < 6 or w.some((v) -> return v < 0 or v > 1)
+				Check.error('genre weigthing is invalid: %s', w)
+				return false
+			return true
+
+		Check.missionOverrides = (overrides) ->
+			if overrides.length < 6 or overrides.some((o) -> o.length < 6 or o.some((w) -> w > 1 or w < 0))
+				Check.error('invalid missionOverrides: %s', w)
+				return false
+			return true
+
+		Check.date = (date) ->
+			if date and date.split
+				v = date.split('/')
+				if v and v.length is 3 and not v.some((t) -> t < 1) and v[1] <= 12 and v[2] <= 4 then return true
+				Check.error('date invalid: %s', date)
+				return false
+
+		Check.propertiesPresent = (obj, props) ->
+			if not obj then return false
+			if not props then return true
+			for p in props
+				if not p or p.length < 1 then continue
+				if not obj.hasOwnProperty(p)
+					Check.error('property not set on object: %s', p)
+					return false
+			return true
+
+		Check.uniqueness = (obj, prop, values, ignoreErr) ->
+			if values.some((v) -> v[prop] is obj[prop])
+				if not ignoreErr then Check.error('duplicate value for %s found: %s', prop, obj[prop])
+				return false
+			return true
+
+		Check
 	)()
 
 	util
@@ -718,14 +865,17 @@ SDP.Functional = {}
 #
 # @param [ResearchItem] item The item to register
 SDP.Functional.addResearchItem = (item) ->
-	if item.v? then GDT.addResearchItem(item) else
-		Research.engineItems.push(item) if Checks.checkPropertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.checkUniqueness(item, 'id', Research.getAllItems())
+	Checks = SDP.Util.Check
+	if Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())
+		SDP.GDT.Research.researches.push(item)
+		GDT.Research.engineItems(item)
 	return
 
 # Registers a Platform item
 #
 # @param [PlatformItem] item The item to register
 SDP.Functional.addPlatformItem = (item) ->
+	Checks = SDP.Util.Check
 	fix = SDP.Util.fixItemNaming
 	fix(item, 'licensePrice','licencePrize')
 	fix(item, 'publishDate', 'published')
@@ -735,15 +885,15 @@ SDP.Functional.addPlatformItem = (item) ->
 	fix(item, 'audienceWeight', 'audienceWeightings')
 	fix(item, 'marketPoints', 'marketKeyPoints')
 
-	if Checks.checkPropertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.checkUniqueness(item, 'id', Platforms.allPlatforms) and Checks.checkAudienceWeightings(item.audienceWeightings) and Checks.checkGenreWeightings(item.genreWeightings) and Checks.checkDate(item.published) and Checks.checkDate(item.platformRetireDate)
+	if Checks.propertiesPresent(item, ['id', 'name', 'company', 'startAmount', 'unitsSold', 'licencePrize', 'published', 'platformRetireDate', 'developmentCosts', 'genreWeightings', 'audienceWeightings', 'techLevel', 'baseIconUri', 'imageDates']) and Checks.uniqueness(item, 'id', SDP.GDT.Platform.getAll()) and Checks.audienceWeightings(item.audienceWeightings) and Checks.genreWeightings(item.genreWeightings) and Checks.date(item.published) and Checks.date(item.platformRetireDate)
 		if item.marketKeyPoints then for point in item.marketKeyPoints
-			return unless Checks.checkDate(point.date)
+			return unless Checks.date(point.date)
 		###
 		if Checks.checkUniqueness(item.name, 'name', Companies.getAllCompanies())
 			SDP.GDT.addCompany(item.name).addPlatform(item)
 		else
 		###
-		Platforms.allPlatforms.push(item)
+		SDP.GDT.Platform.platforms.push(item)
 		if item.events then for event of item.events
 			GDT.addEvent(event)
 	return
@@ -752,19 +902,30 @@ SDP.Functional.addPlatformItem = (item) ->
 #
 # @param [TopicItem] item The item to register
 SDP.Functional.addTopicItem = (item) ->
+	Checks = SDP.Util.Check
 	fix = SDP.Util.fixItemNaming
 	fix(item, 'genreWeight', 'genreWeightings')
 	fix(item, 'audienceWeight', 'audienceWeightings')
 	fix(item, 'overrides', 'missionOverrides')
-	GDT.addTopic(item)
+	if Checks.propertiesPresent(t, ['name', 'id', 'genreWeightings', 'audienceWeightings']) and Checks.audienceWeightings(t.audienceWeightings) and Checks.genreWeightings(t.genreWeightings) and Checks.uniqueness(t, 'id', SDP.GDT.Topic.getAll(), true)
+		SDP.GDT.Topic.topics.push(item)
+	return
+
+SDP.Functional.addTopicItems = (list...) ->
+	if list.length is 1
+		list = list[0]
+		if not SDP.Util.isArray(list) then return SDP.Functional.addTopicItem(list)
+	SDP.Functional.addTopicItem(item) for item in list
+
 
 # Registers a Research Project item
 #
 # @param [ResearchProjectItem] item The item to register
 SDP.Functional.addResearchProjectItem = (item) ->
+	Checks = SDP.Util.Check
 	unless item.canResearch? then item.canResearch = ((company)->true)
-	if Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) and Checks.checkUniqueness(item, 'id', Research.bigProjects)
-		Research.bigProjects.push(item)
+	if Checks.propertiesPresent(item, ['id', 'name', 'pointsCost', 'iconUri', 'description', 'targetZone']) and Checks.uniqueness(item, 'id', SDP.GDT.ResearchProject.getAll())
+		SDP.GDT.ResearchProject.projects.push(item)
 	return
 
 SDP.Functional.addResearchProject = (item) -> SDP.Functional.addResearchProjectItem(item)
@@ -1482,8 +1643,61 @@ SDP.GDT = ( ->
 		}
 	)()
 
+	GDT.ModSupport = ( ->
+		ModSupport = {}
+
+		oldLoad = ModSupport.loadMod
+		ModSupport.loadMod = (enableMods, i) ->
+			SDP.Util.Logger.formatter = SDP.Util.Logger.printf
+			oldLoad(enableMods, i)
+
+		ModSupport
+	)()
+	ModSupport.loadMod = GDT.ModSupport.loadMod
 
 	GDT
+)()
+
+# Adds a basic wrapper of UltimateLib functionality for easy conversion to the SDP
+( ->
+	SDP.ULWrapper = {}
+	unless String::endsWith?
+		String::endsWith = (a) ->
+			@substr(@length - a.length) is a
+	unless String::startsWith?
+		String::startsWith = (a) ->
+			@substr(0, a.length) is a
+	unless Number::truncateDecimals?
+		Number::truncateDecimals = (a) ->
+			b = @ - Math.pow(10, -a) / 2
+			b += b / Math.pow(2, 53)
+			b.toFixed(a)
+
+	SDP.ULWrapper.Logger = ( ->
+		Loggger = { enabled: true }
+		Logger.log = (e, c) ->
+			if not Logger.enabled then return
+			unless c? then SDP.Util.Logger.debug(e) else SDP.Util.Logger.error("#{e}\n#{c.message}")
+		Logger
+	)()
+
+	SDP.ULWrapper.Contracts = ( ->
+		Contracts = {}
+		# add Contract modifications here
+		Contracts
+	)()
+
+	SDP.ULWrapper.Publishers = ( ->
+		Publishers = {}
+		# add Publisher modifications here
+		Publishers
+	)()
+
+	SDP.ULWrapper.Research = ( ->
+		Research = {}
+		# add Research modifications here
+		Research
+	)()
 )()
 
 
