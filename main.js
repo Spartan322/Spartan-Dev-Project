@@ -68,9 +68,6 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
 ---
-@customType ReviewMessageItem
-@attribute [String] id The unique id of the item
----
 @customType NotificationItem
 @attribute [String] header The header of the notification
 @attribute [String] text The text to display upon notifcation being tiggered
@@ -625,7 +622,7 @@ SDP.Util = (function() {
       posix: null
     };
     fsys.cwd = function() {
-      return fsys.path.resolve(process.cwd());
+      return PlatformShim.getScriptPath(true);
     };
     fsys.walk = function(dir, finish) {
       var results;
@@ -673,7 +670,7 @@ SDP.Util = (function() {
       result = null;
       fs.readFile(p.get(), function(err, data) {
         if (err) {
-          alert(err);
+          util.Logger.alert(err);
         }
         return result = JSON.parse(data);
       });
@@ -689,7 +686,7 @@ SDP.Util = (function() {
       return fsys.walk(p.get(), function(err, files) {
         var results;
         if (err) {
-          alert(err);
+          util.Logger.alert(err);
         }
         results = [];
         files.forEach(function(file) {
@@ -799,7 +796,7 @@ SDP.Util = (function() {
     }
     func = SDP.Functional["add" + (item.objectType.capitalize()) + "Item"];
     if (!func) {
-      alert("SDP.Util.registerJSONObject could not find the function for objectType " + item.objectType);
+      util.Logger.alert("SDP.Util.registerJSONObject could not find the function for objectType " + item.objectType);
       return;
     }
     return func(item);
@@ -1344,10 +1341,33 @@ SDP.Functional = {};
 SDP.Functional.addResearchItem = function(item) {
   var Checks;
   Checks = SDP.Util.Check;
+  if (item.type == null) {
+    item.type = 'engine';
+  }
   if (Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) && Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())) {
     SDP.GDT.Research.researches.push(item);
     GDT.Research.engineItems(item);
   }
+};
+
+SDP.Functional.addStartResearch = function(item) {
+  item.type = 'start';
+  return SDP.Functional.addResearchItem(item);
+};
+
+SDP.Functional.addBasicResearch = function(item) {
+  item.type = 'basic';
+  return SDP.Functional.addResearchItem(item);
+};
+
+SDP.Functional.addEngineResearch = function(item) {
+  item.type = 'engine';
+  return SDP.Functional.addResearchItem(item);
+};
+
+SDP.Functional.addSpecialResearch = function(item) {
+  item.type = 'special';
+  return SDP.Functional.addResearchItem(item);
 };
 
 SDP.Functional.addPlatformItem = function(item) {
@@ -1432,18 +1452,62 @@ SDP.Functional.addResearchProject = function(item) {
   return SDP.Functional.addResearchProjectItem(item);
 };
 
-SDP.Functional.addTrainingItem = function(item) {};
+SDP.Functional.addTrainingItem = function(item) {
+  var Checks;
+  Checks = SDP.Util.Check;
+  if (!((item.canSee != null) && (item.canUse != null))) {
+    item.canSee = function(staff, company) {
+      return true;
+    };
+  }
+  if (Checks.propertiesPresent(item, ['id', 'name', 'pointsCost', 'duration', 'category', 'categoryDisplayName']) && Checks.uniqueness(item, 'id', SDP.GDT.Training.getAll())) {
+    SDP.GDT.Training.trainings.push(item);
+  }
+};
 
-SDP.Functional.addContractItem = function(item) {};
+SDP.Functional.addContractItem = function(item) {
+  var Checks;
+  Checks = SDP.Util.Check;
+  if (Checks.propertiesPresent(item, ['id', 'name', 'description', 'tF', 'dF']) && Checks.uniqueness(item, 'id', SDP.GDT.Contract.getAll())) {
+    SDP.GDT.Contract.contracts.push(item);
+  }
+};
 
-SDP.Functional.addPublisherItem = function(item) {};
+SDP.Functional.addPublisherItem = function(item) {
+  var Checks;
+  Checks = SDP.Util.Check;
+  if (Checks.propertiesPresent(item, ['id', 'name']) && Checks.uniqueness(item, 'id', SDP.GDT.Publisher.getAll())) {
+    SDP.GDT.Publisher.publishers.push(item);
+  }
+};
 
-SDP.Functional.addReviewerItem = function(item) {};
-
-SDP.Functional.addReviewMessageItem = function(item) {};
+SDP.Functional.addReviewerItem = function(item) {
+  var Checks;
+  Checks = SDP.Util.Check;
+  if (Checks.propertiesPresent(item, ['id', 'name']) && Checks.uniqueness(item, 'id', SDP.GDT.Review.getAll())) {
+    SDP.GDT.Review.reviewer.push(item);
+  }
+};
 
 SDP.Functional.addNotificationToQueue = function(item) {
   var ref, ref1, ref2;
+  if (SDP.Util.isString(item)) {
+    item = item.split('\n');
+    if (item.length === 1) {
+      item = item[0].split(':');
+    }
+    if (item.length === 1) {
+      item = item[0].split(';');
+    }
+    item.forEach(function(e, i) {
+      return item[i] = e.trim();
+    });
+    item = {
+      header: item[0],
+      text: item[1],
+      buttonText: item[2]
+    };
+  }
   if (item.header == null) {
     item.header = '?';
   }
@@ -1835,7 +1899,7 @@ SDP.GDT = (function() {
       for (k = 0, len = ref.length; k < len; k++) {
         t = ref[k];
         if ((t.canSee && t.can(staff, staff.company) || (t.canUse == null)) || (!t.canSee && t.canUse(staff, staff.company))) {
-          results.push;
+          results.push(t);
         }
       }
       return results;
@@ -1991,12 +2055,6 @@ SDP.GDT = (function() {
 			rF: 1.5
 		}];
     var generateConvertContracts;
-    generateConvertContracts = function(type) {
-      return function(e) {
-        e.size = type;
-        return e.id = e.name.replace(' ', '');
-      };
-    };
     GDT.Contract = {
       contracts: [],
       getAll: function() {
@@ -2005,8 +2063,8 @@ SDP.GDT = (function() {
       getAvailable: function(company) {
         var c, k, len, ref, results;
         results = [];
-        ref = GDT.Contract.getAll().filter(function(c) {
-          return (contr.isAvailable == null) || contr.isAvailable(company);
+        ref = GDT.Contract.getAll().filter(function(contract) {
+          return (contract.isAvailable == null) || contract.isAvailable(company);
         });
         for (k = 0, len = ref.length; k < len; k++) {
           c = ref[k];
@@ -2135,6 +2193,12 @@ SDP.GDT = (function() {
         });
       }
     };
+    generateConvertContracts = function(type) {
+      return function(e) {
+        e.size = type;
+        return e.id = e.name.replace(' ', '');
+      };
+    };
     smallContracts.forEach(generateConvertContracts('small'));
     mediumContracts.forEach(generateConvertContracts('medium'));
     largeContracts.forEach(generateConvertContracts('large'));
@@ -2184,14 +2248,14 @@ SDP.GDT = (function() {
         return GDT.Publisher.publishers.slice();
       },
       getAvailable: function(company) {
-        var c, k, len, ref, results;
+        var k, len, p, ref, results;
         results = [];
-        ref = GDT.Publisher.getAll().filter(function(c) {
-          return (contr.isAvailable == null) || contr.isAvailable(company);
+        ref = GDT.Publisher.getAll().filter(function(publisher) {
+          return (publisher.isAvailable == null) || publisher.isAvailable(company);
         });
         for (k = 0, len = ref.length; k < len; k++) {
-          c = ref[k];
-          results.push(c);
+          p = ref[k];
+          results.push(p);
         }
         return results;
       },
@@ -2380,6 +2444,499 @@ SDP.GDT = (function() {
         });
       }
     };
+  })();
+  (function() {
+    var reviewers;
+    reviewers = ["Star Games", "Informed Gamer", "Game Hero", "All Games"];
+    GDT.Review = {
+      reviewers: reviewers.slice(),
+      messages: [],
+      getAll: function() {
+        return GDT.Review.reviewers.slice();
+      },
+      getAvailable: function(company) {
+        var k, len, r, ref, results;
+        results = [];
+        ref = GDT.Review.getAll().filter(function(reviewer) {
+          return (reviewer.isAvailable == null) || reviewer.isAvailable(company);
+        });
+        for (k = 0, len = ref.length; k < len; k++) {
+          r = ref[k];
+          results.push(r);
+        }
+        return results;
+      },
+      getAllMessages: function() {
+        return GDT.Review.messages.slice();
+      },
+      pickReviewers: function(count) {
+        var i, k, r, ref, results;
+        results = [];
+        reviewers = GDT.Review.getAvailable();
+        r = void 0;
+        for (i = k = 0, ref = count; 0 <= ref ? k <= ref : k >= ref; i = 0 <= ref ? ++k : --k) {
+          r = reviewers.pickRandom();
+          results.push(r);
+          reviewers.remove();
+        }
+        return results;
+      },
+      reviewLatestFor: function(company) {
+        var achievedRatio, badDecisions, baseScore, bugModifier, bugsPercentage, demote, diff, difference, dp, executedDevMissions, finalScore, game, gameAudienceWeighting, generalModifier, genreText, goldenRatio, goodDecisions, highestWeighting, highestWeightingIndex, i, i1, j1, k, key, l, len, len1, len2, len3, len4, len5, m, maxScoreFactor, maxTech, minTech, mission, mmoFactor, negativeMessages, newStaff, nonOptimalMissions, numberWorkedOnGame, optimalMissionFocus, optimalSize, p, penalty, perc, percentDifference, platformGenreMatch, positiveMessages, previousGame, ref, ref1, ref2, ref3, ref4, retVal, sameGenreTopic, sequelTo, smallestWeighting, smallestWeightingIndex, techLevelModifier, tempGame, tempWeighting, topScore, topScoreDecrease, topicGenreMatch, tp, trendModifier, u, underdevelopedMissions, value, weighting, x, z;
+        negativeMessages = [];
+        positiveMessages = [];
+        mmoFactor = 1;
+        game = company.currentGame;
+        GDT.fire(GameManager, GDT.eventKeys.gameplay.beforeGameReview, {
+          company: company,
+          game: game
+        });
+        if (game.flags.mmo) {
+          mmoFactor = 2;
+        }
+        sequelTo = void 0;
+        if (game.sequelTo) {
+          sequelTo = company.getGameById(game.sequelTo);
+          if (sequelTo.releaseWeek > company.currentWeek - 40) {
+            game.flags.sequelsTooClose = true;
+          }
+        }
+        tp = game.technologyPoints;
+        dp = game.designPoints;
+        generalModifier = 0;
+        goodDecisions = 0;
+        badDecisions = 0;
+        if (dp + tp >= 30) {
+          goldenRatio = GameGenre.getGoldenRatio(game.genre, game.secondGenre);
+          difference = dp * goldenRatio - tp;
+          percentDifference = 0;
+          percentDifference = tp > dp ? Math.abs(difference / tp * 100) : percentDifference = Math.abs(difference / dp * 100);
+          "goldenRatio percentDifference: {0}".format(percentDifference).log();
+          if (Math.abs(percentDifference) <= 25) {
+            generalModifier += 0.1;
+            goodDecisions += 1;
+            positiveMessages.push("They achieved a great balance between technology and design.".localize());
+          } else if (Math.abs(percentDifference) > 50) {
+            generalModifier -= 0.1;
+            if (difference < 0) {
+              negativeMessages.push("They should focus more on design.".localize());
+            } else {
+              negativeMessages.push("They should focus more on technology.".localize());
+            }
+          }
+        }
+        executedDevMissions = game.featureLog.filter(function(m) {
+          return m.missionType === "mission";
+        });
+        optimalMissionFocus = executedDevMissions.filter(function(m) {
+          var percentage;
+          percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3);
+          return Missions.getGenreWeighting(m, game) >= 0.9 && percentage >= 0.4;
+        });
+        if (optimalMissionFocus.length >= 2) {
+          generalModifier += 0.2;
+          goodDecisions += optimalMissionFocus.length;
+          positiveMessages.push("Their focus on {0} served this game very well.".localize().format(optimalMissionFocus.map(function(m) {
+            return Missions.getMissionWithId(m.id);
+          }).pickRandom().name));
+        } else if (optimalMissionFocus.length === 1) {
+          generalModifier += 0.1;
+          goodDecisions += 1;
+        } else {
+          generalModifier -= 0.15 * mmoFactor;
+        }
+        nonOptimalMissions = executedDevMissions.filter(function(m) {
+          var percentage;
+          percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3);
+          return Missions.getGenreWeighting(m, game) < 0.8 && percentage >= 0.4;
+        });
+        if (nonOptimalMissions.length === 2) {
+          mission = Missions.getMissionWithId(nonOptimalMissions.pickRandom().id);
+          generalModifier -= 0.2 * mmoFactor;
+          badDecisions += nonOptimalMissions.length;
+          negativeMessages.push("Their focus on {0} is a bit odd.".localize().format(mission.name));
+        } else if (nonOptimalMissions.length === 1) {
+          generalModifier -= 0.1 * mmoFactor;
+          badDecisions += 1;
+        }
+        underdevelopedMissions = executedDevMissions.filter(function(m) {
+          var percentage;
+          percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3);
+          return Missions.getGenreWeighting(m, game) >= 0.9 && percentage <= 0.2;
+        });
+        for (k = 0, len = underdevelopedMissions.length; k < len; k++) {
+          m = underdevelopedMissions[k];
+          mission = Missions.getMissionWithId(m.id);
+          generalModifier -= 0.15 * mmoFactor;
+          badDecisions += 1;
+          negativeMessages.push("They shouldn't forget about {0}.".localize().format(mission.name));
+        }
+        value = (dp + tp) / 2 / General.getGameSizePointsFactor(game);
+        topicGenreMatch = GameGenre.getGenreWeighting(game.topic.genreWeightings, game.genre, game.secondGenre);
+        if (topicGenreMatch <= 0.6) {
+          negativeMessages.push("{0} and {1} is a terrible combination.".localize().format(game.topic.name, game.getGenreDisplayName()));
+        } else if (topicGenreMatch === 1) {
+          positiveMessages.push("{0} and {1} is a great combination.".localize().format(game.topic.name, game.getGenreDisplayName()));
+        }
+        genreText = game.genre.name;
+        if (game.secondGenre) {
+          genreText += "-" + game.secondGenre.name;
+        }
+        previousGame = company.gameLog.last();
+        if (previousGame && (!game.flags.isExtensionPack && (previousGame.genre === game.genre && (previousGame.secondGenre === game.secondGenre && previousGame.topic === game.topic)))) {
+          penalty = -0.4;
+          badDecisions += 1;
+          sameGenreTopic = "Another {0}/{1} game?".localize().format(genreText, game.topic.name);
+          negativeMessages.push(sameGenreTopic);
+          game.flags.sameGenreTopic = true;
+          "repeat genre/topic penalty: {0}:".format(penalty).log();
+          generalModifier += penalty;
+        }
+        platformGenreMatch = Platforms.getGenreWeighting(game.platforms, game.genre, game.secondGenre);
+        if (platformGenreMatch <= 0.6) {
+          smallestWeighting = Platforms.getNormGenreWeighting(game.platforms[0].genreWeightings, game.genre, game.secondGenre);
+          smallestWeightingIndex = 0;
+          ref = game.platforms;
+          for (i = l = 0, len1 = ref.length; l < len1; i = ++l) {
+            p = ref[i];
+            tempWeighting = Platforms.getNormGenreWeighting(p.genreWeightings, game.genre, game.secondGenre);
+            if (tempWeighting < smallestWeighting) {
+              smallestWeightingIndex = i;
+            }
+          }
+          negativeMessages.push("{0} games don't work well on {1}.".localize().format(genreText, game.platforms[smallestWeightingIndex].name));
+        } else if (platformGenreMatch > 1) {
+          highestWeighting = Platforms.getNormGenreWeighting(game.platforms[0].genreWeightings, game.genre, game.secondGenre);
+          highestWeightingIndex = 0;
+          ref1 = game.platforms;
+          for (i = u = 0, len2 = ref1.length; u < len2; i = ++u) {
+            p = ref1[i];
+            tempWeighting = Platforms.getNormGenreWeighting(p.genreWeightings, game.genre, game.secondGenre);
+            if (tempWeighting > highestWeighting) {
+              highestWeightingIndex = i;
+            }
+          }
+          positiveMessages.push("{0} games work well on {1}.".localize().format(genreText, game.platforms[highestWeightingIndex].name));
+        }
+        gameAudienceWeighting = General.getAudienceWeighting(game.topic.audienceWeightings, game.targetAudience);
+        if (gameAudienceWeighting <= 0.6) {
+          negativeMessages.push("{0} is a horrible topic for {1} audiences.".localize().format(game.topic.name, General.getAudienceLabel(game.targetAudience)));
+        }
+        if (game.flags.sequelsTooClose) {
+          generalModifier -= 0.4;
+          badDecisions += 1;
+          if (game.flags.isExtensionPack) {
+            negativeMessages.push("Already a expansion pack?".localize());
+          } else {
+            negativeMessages.push("Didn't we just play {0} recently?".localize().format(sequelTo.title));
+          }
+        }
+        if (game.flags.usesSameEngineAsSequel && !game.flags.isExtensionPack) {
+          generalModifier -= 0.1;
+          badDecisions += 1;
+        } else if (game.flags.hasBetterEngineThanSequel) {
+          generalModifier += 0.2;
+          goodDecisions += 1;
+        }
+        if (game.flags.mmo) {
+          weighting = GameGenre.getGenreWeighting(game.topic.genreWeightings, game.genre, game.secondGenre);
+          if (weighting < 1) {
+            generalModifier -= 0.15;
+          }
+        }
+        bugModifier = 1;
+        if (game.bugs > 0) {
+          perc = 100 / (game.technologyPoints + game.designPoints);
+          bugsPercentage = (game.bugs * perc).clamp(0, 100);
+          bugModifier = 1 - 0.8 * (bugsPercentage / 100);
+          if (bugModifier <= 0.6) {
+            negativeMessages.push("Riddled with bugs.".localize());
+          } else if (bugModifier < 0.9) {
+            negativeMessages.push("Too many bugs.".localize());
+          }
+        }
+        techLevelModifier = 1;
+        if (game.platforms.length > 1) {
+          maxTech = game.platforms[0].techLevel;
+          if (game.platforms[0].id === "PC") {
+            maxTech = game.platforms[1].techLevel;
+          }
+          minTech = maxTech;
+          ref2 = game.platforms;
+          for (x = 0, len3 = ref2.length; x < len3; x++) {
+            p = ref2[x];
+            if (!(p.id !== "PC")) {
+              continue;
+            }
+            maxTech = Math.max(maxTech, p.techLevel);
+            minTech = Math.min(minTech, p.techLevel);
+          }
+          techLevelModifier -= (maxTech - minTech) / 20;
+        }
+        value += value * generalModifier;
+        value *= platformGenreMatch;
+        value *= gameAudienceWeighting;
+        value *= bugModifier;
+        value *= techLevelModifier;
+        trendModifier = GameTrends.getCurrentTrendFactor(game);
+        game.flags.trendModifier = trendModifier;
+        value *= trendModifier;
+        topScore = getCurrentTopScoreBarrier(company);
+        achievedRatio = value / topScore;
+        if (achievedRatio >= 0.6 && (gameAudienceWeighting <= 0.7 || topicGenreMatch <= 0.7)) {
+          achievedRatio = 0.6 + (achievedRatio - 0.6) / 2;
+        }
+        if (achievedRatio > 0.7) {
+          ref3 = game.platforms;
+          for (z = 0, len4 = ref3.length; z < len4; z++) {
+            p = ref3[z];
+            if (Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience) <= 0.8) {
+              value *= Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience, true);
+              achievedRatio = value / topScore;
+              break;
+            }
+          }
+        }
+        "achieved {0} / top game {1} = {2}".format(value, Reviews.topScore, achievedRatio).log();
+        demote = false;
+        finalScore = (achievedRatio * 10).clamp(1, 10);
+        game.flags.teamContribution = 0;
+        company.staff.forEach(function(s) {
+          if (s.flags.gamesContributed < 1) {
+            return game.flags.teamContribution(elsegame.flags.teamContribution += game.getRatioWorked(s));
+          }
+        });
+        game.flags.teamContribution /= company.staff.length;
+        if (company.lastTopScore > 0 && finalScore <= 5.2 - 0.2 * game.platforms.length) {
+          if (goodDecisions > 0 && (goodDecisions > badDecisions && game.flags.teamContribution >= 0.8)) {
+            baseScore = 6;
+            numberWorkedOnGame = 0;
+            for (key in game.flags.staffContribution) {
+              if (!game.flags.staffContribution.hasOwnProperty(key)) {
+                continue;
+              }
+              numberWorkedOnGame++;
+            }
+            optimalSize = General.getOptimalTeamSize(game);
+            diff = Math.abs(optimalSize - numberWorkedOnGame);
+            if (diff > 1) {
+              baseScore -= diff - 1;
+            }
+            newStaff = Reviews.getNewStaff(game);
+            if (newStaff) {
+              if (newStaff.length > 0) {
+                baseScore -= newStaff.length / 2;
+              }
+            }
+            baseScore += goodDecisions / 2 - badDecisions / 2;
+            if (bugModifier < 0.9) {
+              baseScore -= 0.5;
+            } else if (bugModifier <= 0.6) {
+              baseScore -= 1;
+            }
+            if (platformGenreMatch <= 0.8) {
+              baseScore -= 1 - platformGenreMatch;
+            }
+            if (gameAudienceWeighting <= 0.8) {
+              baseScore -= 1 - gameAudienceWeighting;
+            }
+            if (game.platforms.length > 1) {
+              maxTech = game.platforms[0].techLevel;
+              if (game.platforms[0].id === "PC") {
+                maxTech = game.platforms[1].techLevel;
+              }
+              minTech = maxTech;
+              ref4 = game.platforms;
+              for (i1 = 0, len5 = ref4.length; i1 < len5; i1++) {
+                p = ref4[i1];
+                if (!(p.id !== "PC")) {
+                  continue;
+                }
+                maxTech = Math.max(maxTech, p.techLevel);
+                minTech = Math.min(minTech, p.techLevel);
+              }
+              baseScore -= (maxTech - minTech) / 0.5;
+            }
+            baseScore -= company.getRandom();
+            baseScore = Math.min(baseScore, 7.7);
+            if (finalScore < baseScore) {
+              game.flags.scoreWithoutBrackets = finalScore;
+              finalScore = baseScore;
+            }
+            if (company.gameLog.length > 3) {
+              topScoreDecrease = true;
+              for (i = j1 = 1; j1 <= 3; i = ++j1) {
+                tempGame = company.gameLog[company.gameLog.length - i];
+                if (tempGame.score > 5.2 - 0.2 * tempGame.platforms.length && !tempGame.flags.scoreWithoutBrackets) {
+                  topScoreDecrease = false;
+                  break;
+                }
+              }
+              if (topScoreDecrease) {
+                company.lastTopScore = value;
+                game.flags.topScoreDecreased = true;
+              }
+            }
+          }
+        }
+        maxScoreFactor = getMaxScorePossible(company, game) / 10;
+        if (game.gameSize !== "medium" && (game.gameSize !== "small" && maxScoreFactor < 1)) {
+          negativeMessages.push("Technology is not state of the art.".localize());
+        }
+        finalScore *= maxScoreFactor;
+        if (finalScore >= 9) {
+          if (generalModifier < 0.1 && company.getRandom() < 0.8) {
+            demote = true;
+          } else {
+            newStaff = Reviews.getNewStaff(game);
+            if (newStaff.length > 0) {
+              demote = true;
+              game.flags.newStaffIds = newStaff.map(function(staff) {
+                return staff.id;
+              });
+            }
+          }
+          if (demote) {
+            if (game.flags.newStaffIds && game.flags.newStaffIds.length > 0) {
+              finalScore = 8.15 + 0.95 / game.flags.newStaffIds.length * company.getRandom();
+            } else {
+              finalScore = 8.45 + 0.65 * company.getRandom();
+            }
+            if (company.getRandom() < 0.1) {
+              finalScore = 9 + 0.25 * company.getRandom();
+            }
+            updateTopScore(company, value);
+          }
+        }
+        if (sequelTo) {
+          if (finalScore <= 4) {
+            if (game.flags.isExtensionPack) {
+              negativeMessages.push("What a horrible expansion pack!".localize());
+            } else {
+              negativeMessages.push("What a horrible sequel!".localize());
+            }
+          } else if (finalScore <= 7) {
+            if (game.flags.isExtensionPack) {
+              negativeMessages.push("Average expansion pack.".localize());
+            } else {
+              negativeMessages.push("Average sequel.".localize());
+            }
+          } else {
+            if (game.flags.isExtensionPack) {
+              positiveMessages.push("Great expansion pack.".localize());
+            } else {
+              positiveMessages.push("Great sequel!".localize());
+            }
+          }
+        }
+        if (company.topScoreAchievements < 2 && company.getCurrentDate().year < 4) {
+          if (finalScore === 10) {
+            finalScore -= 1.05 + 0.45 * company.getRandom();
+            setTopScoreAchievement(company, value);
+          } else if (finalScore >= 9) {
+            finalScore -= 1.05 + 0.2 * company.getRandom();
+            setTopScoreAchievement(company, value);
+          } else if (finalScore > 8.5) {
+            finalScore -= 0.4 + 0.2 * company.getRandom();
+          }
+        }
+        if (finalScore >= 9) {
+          setTopScoreAchievement(company, value);
+        }
+        if (finalScore !== 10 && (game.flags.topScore && company.topScoreAchievements === 3)) {
+          finalScore = 10;
+        }
+        game.score = finalScore;
+        "final score: {0}".format(finalScore).log();
+        if (sequelTo) {
+          if (company.getRandom() <= 0.5 || !company.gameLog.some(function(g) {
+            return g.sequelTo != null;
+          })) {
+            if (game.flags.isExtensionPack) {
+              Media.createExtensionPackStory(company, game);
+            } else {
+              Media.createSequelStory(company, game);
+            }
+          }
+        }
+        retVal = Reviews.getReviews(game, finalScore, positiveMessages, negativeMessages);
+        GDT.fire(GameManager, GDT.eventKeys.gameplay.afterGameReview, {
+          company: company,
+          game: game,
+          reviews: retVal
+        });
+        return retVal;
+      },
+      generate: function(game, finalScore, positiveMessages, negativeMessages) {
+        var intScore, k, len, message, reviewer, reviews, score, scoreVariation, scores, usedMessages, variation;
+        intScore = Math.floor(finalScore).clamp(1, 10);
+        if (finalScore >= 9.5) {
+          intScore = 10;
+        }
+        reviewers = GDT.Reviewer.pickReviewers(4);
+        reviews = [];
+        usedMessages = [];
+        scores = [];
+        variation = 1;
+        for (k = 0, len = reviewers.length; k < len; k++) {
+          reviewer = reviewers[k];
+          if (intScore === 5 || intScore === 6) {
+            variation = GameManager.company.getRandom() < 0.05 ? 2 : 1;
+          }
+          scoreVariation = Math.randomSign() === 1 ? 0 : variation * Math.randomSign();
+          score = (intScore + scoreVariation).clamp(1, 10);
+          if (score === 10 && (scores.length === 3 && scores.average() === 10)) {
+            if (!game.flags.psEnabled) {
+              if (Math.floor(finalScore) < 10 || GameManager.company.getRandom() < 0.8) {
+                score--;
+              }
+            } else if (Math.floor(finalScore) === 10 && GameManager.company.getRandom() < 0.4) {
+              score++;
+            }
+          }
+          message = reviewer.getMessage != null ? reviewer.getMessage(game, finalScore) : void 0;
+          if (message === void 0) {
+            do {
+							if (GameManager.company.getRandom() <= 0.2)
+								if (scoreVariation >= 0 && (score > 2 && positiveMessages.length != 0))
+									message = positiveMessages.pickRandom();
+								else {
+									if (scoreVariation < 0 && (score < 6 && negativeMessages != 0))
+										message = negativeMessages.pickRandom()
+								}
+							else
+								message = undefined;
+							if (!message)
+								message = Reviews.getGenericReviewMessage(game, score)
+						} while (usedMessages.weakIndexOf(message) != -1);
+          }
+          usedMessages.push(message);
+          scores.push(score);
+          reviews.push({
+            score: score,
+            message: message,
+            reviewerName: reviewer.name
+          });
+        }
+        return reviews;
+      },
+      getById: function(id) {
+        return GDT.Reviewer.getAll().first(function(r) {
+          return r.id === id;
+        });
+      },
+      getMessageById: function(id) {
+        return GDT.Reviewer.getAllMessages.first(function(m) {
+          return m.id === id;
+        });
+      }
+    };
+    return GDT.Reviewer.reviewers.forEach(function(e, i) {
+      return GDT.Reviewer.reviewers[i] = {
+        name: e,
+        id: e.replace(' ', '')
+      };
+    });
   })();
   GDT.ModSupport = (function() {
     var ModSupport, oldLoad;

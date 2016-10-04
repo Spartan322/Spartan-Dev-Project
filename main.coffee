@@ -66,9 +66,6 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
 ---
-@customType ReviewMessageItem
-@attribute [String] id The unique id of the item
----
 @customType NotificationItem
 @attribute [String] header The header of the notification
 @attribute [String] text The text to display upon notifcation being tiggered
@@ -423,7 +420,7 @@ SDP.Util = ( ->
 			posix: null
 		}
 
-		fsys.cwd = -> fsys.path.resolve(process.cwd())
+		fsys.cwd = -> PlatformShim.getScriptPath(true)
 
 		fsys.walk = (dir, finish) ->
 				results = []
@@ -451,7 +448,7 @@ SDP.Util = ( ->
 			if p.extname() isnt '.json' then throw new TypeError("SDP.Util.Filesystem.readJSONFile only operates on JSON files")
 			result = null
 			fs.readFile(p.get(), (err, data) ->
-				if err then alert(err)
+				if err then util.Logger.alert(err)
 				result = JSON.parse(data)
 			)
 			result
@@ -460,7 +457,7 @@ SDP.Util = ( ->
 			if p.constructor isnt util.Path then p = new fsys.Path(path)
 			if not p.isDirectory() then throw new TypeError("SDP.Util.Filesystem.readJSONDirectory can not operate on just files")
 			return fsys.walk(p.get(), (err, files) ->
-				if err then alert(err)
+				if err then util.Logger.alert(err)
 				results = []
 				files.forEach((file) ->
 					pa = new fsys.Path(file)
@@ -527,7 +524,7 @@ SDP.Util = ( ->
 		if not util.isString(item.objectType) then throw new TypeError("SDP.Util.registerJSONObject can not work on items that don't contain an objectType field")
 		func = SDP.Functional["add#{item.objectType.capitalize()}Item"]
 		if not func
-			alert("SDP.Util.registerJSONObject could not find the function for objectType #{item.objectType}")
+			util.Logger.alert("SDP.Util.registerJSONObject could not find the function for objectType #{item.objectType}")
 			return
 		func(item)
 
@@ -866,10 +863,24 @@ SDP.Functional = {}
 # @param [ResearchItem] item The item to register
 SDP.Functional.addResearchItem = (item) ->
 	Checks = SDP.Util.Check
+	unless item.type? then item.type = 'engine'
 	if Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())
 		SDP.GDT.Research.researches.push(item)
 		GDT.Research.engineItems(item)
 	return
+
+SDP.Functional.addStartResearch = (item) ->
+	item.type = 'start'
+	SDP.Functional.addResearchItem(item)
+SDP.Functional.addBasicResearch = (item) ->
+	item.type = 'basic'
+	SDP.Functional.addResearchItem(item)
+SDP.Functional.addEngineResearch = (item) ->
+	item.type = 'engine'
+	SDP.Functional.addResearchItem(item)
+SDP.Functional.addSpecialResearch = (item) ->
+	item.type = 'special'
+	SDP.Functional.addResearchItem(item)
 
 # Registers a Platform item
 #
@@ -934,41 +945,53 @@ SDP.Functional.addResearchProject = (item) -> SDP.Functional.addResearchProjectI
 #
 # @param [TrainingItem] item The item to register
 SDP.Functional.addTrainingItem = (item) ->
-
+	Checks = SDP.Util.Check
+	unless item.canSee? and item.canUse? then item.canSee = (staff, company) -> true
+	if Checks.propertiesPresent(item, ['id', 'name', 'pointsCost', 'duration', 'category', 'categoryDisplayName']) and Checks.uniqueness(item, 'id', SDP.GDT.Training.getAll())
+		SDP.GDT.Training.trainings.push(item)
 	return
 
 # Registers a Contract item
 #
 # @param [ContractItem] item The item to register
 SDP.Functional.addContractItem = (item) ->
-
+	Checks = SDP.Util.Check
+	if Checks.propertiesPresent(item, ['id', 'name', 'description', 'tF', 'dF']) and Checks.uniqueness(item, 'id', SDP.GDT.Contract.getAll())
+		SDP.GDT.Contract.contracts.push(item)
 	return
 
 # Registers a Publisher item
 #
 # @param [PublisherItem] item The item to register
 SDP.Functional.addPublisherItem = (item) ->
-
+	Checks = SDP.Util.Check
+	if Checks.propertiesPresent(item, ['id', 'name']) and Checks.uniqueness(item, 'id', SDP.GDT.Publisher.getAll())
+		SDP.GDT.Publisher.publishers.push(item)
 	return
 
 # Registers a Reviewer item
 #
 # @param [ReviewerItem] item The item to register
 SDP.Functional.addReviewerItem = (item) ->
-
-	return
-
-# Registers a Review Message item
-#
-# @param [ReviewMessageItem] item The item to register
-SDP.Functional.addReviewMessageItem = (item) ->
-
+	Checks = SDP.Util.Check
+	if Checks.propertiesPresent(item, ['id', 'name']) and Checks.uniqueness(item, 'id', SDP.GDT.Review.getAll())
+		SDP.GDT.Review.reviewer.push(item)
 	return
 
 # Adds a notification to the triggering queue
 #
 # @param [NotificationItem] item The item to queue
 SDP.Functional.addNotificationToQueue = (item) ->
+	if SDP.Util.isString(item)
+		item = item.split('\n')
+		if item.length is 1 then item = item[0].split(':')
+		if item.length is 1 then item = item[0].split(';')
+		item.forEach((e, i) -> item[i] = e.trim())
+		item = {
+			header: item[0]
+			text: item[1]
+			buttonText: item[2]
+		}
 	item.header = '?' unless item.header?
 	item.text = '?' unless item.text?
 	if not item instanceof Notification
@@ -1193,7 +1216,7 @@ SDP.GDT = ( ->
 		getAvailable: (staff) ->
 			results = []
 			for t in GDT.Training.getAll()
-				results.push if (t.canSee and t.can(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
+				results.push(t) if (t.canSee and t.can(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
 			results
 		getById: (id) -> GDT.Training.getAll().first((t) -> t.id is id)
 	}
@@ -1343,16 +1366,12 @@ SDP.GDT = ( ->
 			dF: 1,
 			rF: 1.5
 		}]`
-		generateConvertContracts = (type) ->
-			(e) ->
-				e.size = type
-				e.id = e.name.replace(' ', '')
 		GDT.Contract = {
 			contracts: []
 			getAll: -> GDT.Contract.contracts.slice()
 			getAvailable: (company) ->
 				results = []
-				for c in GDT.Contract.getAll().filter((c) -> not contr.isAvailable? or contr.isAvailable(company))
+				for c in GDT.Contract.getAll().filter((contract) -> not contract.isAvailable? or contract.isAvailable(company))
 					results.push(c)
 				results
 			getSettings: (company, size) ->
@@ -1435,6 +1454,10 @@ SDP.GDT = ( ->
 				results.shuffle(new MersenneTwister(GDT.Contract.getSeed(settings))).filter((c) -> not c.skip)
 			getById: (id) -> GDT.Contract.getAll().first((c) -> c.id is id)
 		}
+		generateConvertContracts = (type) ->
+			(e) ->
+				e.size = type
+				e.id = e.name.replace(' ', '')
 		smallContracts.forEach(generateConvertContracts('small'))
 		mediumContracts.forEach(generateConvertContracts('medium'))
 		largeContracts.forEach(generateConvertContracts('large'))
@@ -1485,8 +1508,8 @@ SDP.GDT = ( ->
 			getAll: -> GDT.Publisher.publishers.slice()
 			getAvailable: (company) ->
 				results = []
-				for c in GDT.Publisher.getAll().filter((c) -> not contr.isAvailable? or contr.isAvailable(company))
-					results.push(c)
+				for p in GDT.Publisher.getAll().filter((publisher) -> not publisher.isAvailable? or publisher.isAvailable(company))
+					results.push(p)
 				results
 			generate: (company, max) ->
 				settings = GDT.Contract.getSettings(company, size)
@@ -1641,6 +1664,317 @@ SDP.GDT = ( ->
 				results
 			getById: (id) -> GDT.Publisher.getAll().first((p) -> p.id is id)
 		}
+	)()
+
+	( ->
+		reviewers = ["Star Games", "Informed Gamer", "Game Hero", "All Games"]
+		GDT.Review = {
+			reviewers: reviewers.slice()
+			messages: []
+			getAll: -> GDT.Review.reviewers.slice()
+			getAvailable: (company) ->
+				results = []
+				for r in GDT.Review.getAll().filter((reviewer) -> not reviewer.isAvailable? or reviewer.isAvailable(company))
+					results.push(r)
+				results
+			getAllMessages: -> GDT.Review.messages.slice()
+			pickReviewers: (count) ->
+				results = []
+				reviewers = GDT.Review.getAvailable()
+				r = undefined
+				for i in [0..count]
+					r = reviewers.pickRandom()
+					results.push(r)
+					reviewers.remove()
+				results
+			reviewLatestFor: (company) ->
+				negativeMessages = []
+				positiveMessages = []
+				mmoFactor = 1
+				game = company.currentGame
+				GDT.fire(GameManager, GDT.eventKeys.gameplay.beforeGameReview, {
+					company : company,
+					game : game
+				})
+				if game.flags.mmo then mmoFactor = 2
+				sequelTo = undefined
+				if game.sequelTo
+					sequelTo = company.getGameById(game.sequelTo)
+					if sequelTo.releaseWeek > company.currentWeek - 40 then game.flags.sequelsTooClose = true
+				tp = game.technologyPoints
+				dp = game.designPoints
+				generalModifier = 0
+				goodDecisions = 0
+				badDecisions = 0
+				if dp + tp >= 30
+					goldenRatio = GameGenre.getGoldenRatio(game.genre, game.secondGenre)
+					difference = dp * goldenRatio - tp
+					percentDifference = 0
+					percentDifference = if (tp > dp) then Math.abs(difference / tp * 100) else percentDifference = Math.abs(difference / dp * 100)
+					"goldenRatio percentDifference: {0}".format(percentDifference).log()
+					if Math.abs(percentDifference) <= 25
+						generalModifier += 0.1
+						goodDecisions += 1
+						positiveMessages.push("They achieved a great balance between technology and design.".localize())
+					else if Math.abs(percentDifference) > 50
+						generalModifier -= 0.1
+						if difference < 0 then negativeMessages.push("They should focus more on design.".localize())
+						else negativeMessages.push("They should focus more on technology.".localize())
+				executedDevMissions = game.featureLog.filter((m) -> m.missionType is "mission" )
+				optimalMissionFocus = executedDevMissions.filter((m) ->
+						percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3)
+						Missions.getGenreWeighting(m, game) >= 0.9 and percentage >= 0.4
+				)
+				if optimalMissionFocus.length >= 2
+					generalModifier += 0.2
+					goodDecisions += optimalMissionFocus.length
+					positiveMessages.push("Their focus on {0} served this game very well.".localize().format(optimalMissionFocus.map((m) -> Missions.getMissionWithId(m.id)).pickRandom().name))
+				else if optimalMissionFocus.length is 1
+					generalModifier += 0.1
+					goodDecisions += 1
+				else
+					generalModifier -= 0.15 * mmoFactor
+				nonOptimalMissions = executedDevMissions.filter (m) ->
+						percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3)
+						Missions.getGenreWeighting(m, game) < 0.8 and percentage >= 0.4
+				if nonOptimalMissions.length is 2
+					mission = Missions.getMissionWithId(nonOptimalMissions.pickRandom().id)
+					generalModifier -= 0.2 * mmoFactor
+					badDecisions += nonOptimalMissions.length
+					negativeMessages.push("Their focus on {0} is a bit odd.".localize().format(mission.name))
+				else if nonOptimalMissions.length is 1
+					generalModifier -= 0.1 * mmoFactor
+					badDecisions += 1
+				underdevelopedMissions = executedDevMissions.filter (m) ->
+						percentage = m.duration / General.getGameSizeDurationFactor(game.gameSize) / General.getMultiPlatformDurationFactor(game) / (Missions.BASE_DURATION * 3)
+						Missions.getGenreWeighting(m, game) >= 0.9 and percentage <= 0.2
+				for m in underdevelopedMissions
+					mission = Missions.getMissionWithId(m.id)
+					generalModifier -= 0.15 * mmoFactor
+					badDecisions += 1
+					negativeMessages.push("They shouldn't forget about {0}.".localize().format(mission.name))
+				value = (dp + tp) / 2 / General.getGameSizePointsFactor(game)
+				topicGenreMatch = GameGenre.getGenreWeighting(game.topic.genreWeightings, game.genre, game.secondGenre)
+				if topicGenreMatch <= 0.6
+					negativeMessages.push("{0} and {1} is a terrible combination.".localize().format(game.topic.name, game.getGenreDisplayName()))
+				else if topicGenreMatch is 1
+					positiveMessages.push("{0} and {1} is a great combination.".localize().format(game.topic.name, game.getGenreDisplayName()))
+				genreText = game.genre.name
+				if game.secondGenre then genreText += "-" + game.secondGenre.name
+				previousGame = company.gameLog.last()
+				if previousGame and (not game.flags.isExtensionPack and (previousGame.genre is game.genre and (previousGame.secondGenre is game.secondGenre and previousGame.topic is game.topic)))
+					penalty = -0.4
+					badDecisions += 1
+					sameGenreTopic = "Another {0}/{1} game?".localize().format(genreText, game.topic.name)
+					negativeMessages.push(sameGenreTopic)
+					game.flags.sameGenreTopic = true
+					"repeat genre/topic penalty: {0}:".format(penalty).log()
+					generalModifier += penalty
+				platformGenreMatch = Platforms.getGenreWeighting(game.platforms, game.genre, game.secondGenre)
+				if platformGenreMatch <= 0.6
+					smallestWeighting = Platforms.getNormGenreWeighting(game.platforms[0].genreWeightings, game.genre, game.secondGenre)
+					smallestWeightingIndex = 0
+					for p,i in game.platforms
+						tempWeighting = Platforms.getNormGenreWeighting(p.genreWeightings, game.genre, game.secondGenre)
+						if tempWeighting < smallestWeighting then smallestWeightingIndex = i
+					negativeMessages.push("{0} games don't work well on {1}.".localize().format(genreText, game.platforms[smallestWeightingIndex].name))
+				else if platformGenreMatch > 1
+					highestWeighting = Platforms.getNormGenreWeighting(game.platforms[0].genreWeightings, game.genre, game.secondGenre)
+					highestWeightingIndex = 0
+					for p,i in game.platforms
+						tempWeighting = Platforms.getNormGenreWeighting(p.genreWeightings, game.genre, game.secondGenre)
+						if tempWeighting > highestWeighting then highestWeightingIndex = i
+					positiveMessages.push("{0} games work well on {1}.".localize().format(genreText, game.platforms[highestWeightingIndex].name))
+				gameAudienceWeighting = General.getAudienceWeighting(game.topic.audienceWeightings, game.targetAudience)
+				if gameAudienceWeighting <= 0.6
+					negativeMessages.push("{0} is a horrible topic for {1} audiences.".localize().format(game.topic.name, General.getAudienceLabel(game.targetAudience)))
+				if game.flags.sequelsTooClose
+					generalModifier -= 0.4
+					badDecisions += 1
+					if game.flags.isExtensionPack then negativeMessages.push("Already a expansion pack?".localize()) else negativeMessages.push("Didn't we just play {0} recently?".localize().format(sequelTo.title))
+				if game.flags.usesSameEngineAsSequel and not game.flags.isExtensionPack
+					generalModifier -= 0.1
+					badDecisions += 1
+				else if game.flags.hasBetterEngineThanSequel
+					generalModifier += 0.2
+					goodDecisions += 1
+				if game.flags.mmo
+					weighting = GameGenre.getGenreWeighting(game.topic.genreWeightings, game.genre, game.secondGenre)
+					if weighting < 1 then generalModifier -= 0.15
+				bugModifier = 1
+				if game.bugs > 0
+					perc = 100 / (game.technologyPoints + game.designPoints)
+					bugsPercentage = (game.bugs * perc).clamp(0, 100)
+					bugModifier = 1 - 0.8 * (bugsPercentage / 100)
+					if bugModifier <= 0.6 then negativeMessages.push("Riddled with bugs.".localize())
+					else if bugModifier < 0.9 then negativeMessages.push("Too many bugs.".localize())
+				techLevelModifier = 1
+				if game.platforms.length > 1
+					maxTech = game.platforms[0].techLevel
+					if game.platforms[0].id is "PC" then maxTech = game.platforms[1].techLevel
+					minTech = maxTech
+					for p in game.platforms when p.id isnt "PC"
+							maxTech = Math.max(maxTech, p.techLevel)
+							minTech = Math.min(minTech, p.techLevel)
+					techLevelModifier -= (maxTech - minTech) / 20
+				value += value * generalModifier
+				value *= platformGenreMatch
+				value *= gameAudienceWeighting
+				value *= bugModifier
+				value *= techLevelModifier
+				trendModifier = GameTrends.getCurrentTrendFactor(game)
+				game.flags.trendModifier = trendModifier
+				value *= trendModifier
+				topScore = getCurrentTopScoreBarrier(company)
+				achievedRatio = value / topScore
+				if achievedRatio >= 0.6 and (gameAudienceWeighting <= 0.7 or topicGenreMatch <= 0.7)
+					achievedRatio = 0.6 + (achievedRatio - 0.6) / 2
+				if achievedRatio > 0.7
+					for p in game.platforms
+						if Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience) <= 0.8
+							value *= Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience, true)
+							achievedRatio = value / topScore
+							break
+				"achieved {0} / top game {1} = {2}".format(value, Reviews.topScore, achievedRatio).log()
+				demote = false
+				finalScore = (achievedRatio * 10).clamp(1, 10)
+				game.flags.teamContribution = 0
+				company.staff.forEach((s) -> if s.flags.gamesContributed < 1 then game.flags.teamContribution elsegame.flags.teamContribution += game.getRatioWorked(s) )
+				game.flags.teamContribution /= company.staff.length
+				if company.lastTopScore > 0 and finalScore <= 5.2 - 0.2 * game.platforms.length
+					if goodDecisions > 0 and (goodDecisions > badDecisions and game.flags.teamContribution >= 0.8)
+						baseScore = 6
+						numberWorkedOnGame = 0
+						for key of game.flags.staffContribution
+							if not game.flags.staffContribution.hasOwnProperty(key) then continue
+							numberWorkedOnGame++
+						optimalSize = General.getOptimalTeamSize(game)
+						diff = Math.abs(optimalSize - numberWorkedOnGame)
+						if diff > 1 then baseScore -= diff - 1
+						newStaff = Reviews.getNewStaff(game)
+						if newStaff
+							if newStaff.length > 0 then baseScore -= newStaff.length / 2
+						baseScore += goodDecisions / 2 - badDecisions / 2
+						if bugModifier < 0.9 then baseScore -= 0.5
+						else if bugModifier <= 0.6 then baseScore -= 1
+						if platformGenreMatch <= 0.8 then baseScore -= 1 - platformGenreMatch
+						if gameAudienceWeighting <= 0.8 then baseScore -= 1 - gameAudienceWeighting
+						if game.platforms.length > 1
+							maxTech = game.platforms[0].techLevel
+							if game.platforms[0].id is "PC"
+								maxTech = game.platforms[1].techLevel
+							minTech = maxTech
+							for p in game.platforms when p.id isnt "PC"
+									maxTech = Math.max(maxTech, p.techLevel)
+									minTech = Math.min(minTech, p.techLevel)
+							baseScore -= (maxTech - minTech) / 0.5
+						baseScore -= company.getRandom()
+						baseScore = Math.min(baseScore, 7.7)
+						if finalScore < baseScore
+							game.flags.scoreWithoutBrackets = finalScore
+							finalScore = baseScore
+						if company.gameLog.length > 3
+							topScoreDecrease = true
+							for i in [1..3]
+								tempGame = company.gameLog[company.gameLog.length - i]
+								if tempGame.score > 5.2 - 0.2 * tempGame.platforms.length and not tempGame.flags.scoreWithoutBrackets
+									topScoreDecrease = false
+									break
+							if topScoreDecrease
+								company.lastTopScore = value
+								game.flags.topScoreDecreased = true
+				maxScoreFactor = getMaxScorePossible(company, game) / 10
+				if game.gameSize isnt "medium" and (game.gameSize isnt "small" and maxScoreFactor < 1)
+					negativeMessages.push("Technology is not state of the art.".localize())
+				finalScore *= maxScoreFactor
+				if finalScore >= 9
+					if generalModifier < 0.1 and company.getRandom() < 0.8 then demote = true
+					else
+						newStaff = Reviews.getNewStaff(game)
+						if newStaff.length > 0
+							demote = true
+							game.flags.newStaffIds = newStaff.map((staff) -> staff.id )
+					if demote
+						if game.flags.newStaffIds and game.flags.newStaffIds.length > 0
+							finalScore = 8.15 + 0.95 / game.flags.newStaffIds.length * company.getRandom()
+						else
+							finalScore = 8.45 + 0.65 * company.getRandom()
+						if company.getRandom() < 0.1
+							finalScore = 9 + 0.25 * company.getRandom()
+						updateTopScore(company, value)
+				if sequelTo
+					if finalScore <= 4
+						if game.flags.isExtensionPack then negativeMessages.push("What a horrible expansion pack!".localize()) else negativeMessages.push("What a horrible sequel!".localize())
+					else if finalScore <= 7
+						if game.flags.isExtensionPack then negativeMessages.push("Average expansion pack.".localize()) else negativeMessages.push("Average sequel.".localize())
+					else
+						if game.flags.isExtensionPack then positiveMessages.push("Great expansion pack.".localize()) else positiveMessages.push("Great sequel!".localize())
+				if company.topScoreAchievements < 2 and company.getCurrentDate().year < 4
+					if finalScore == 10
+						finalScore -= 1.05 + 0.45 * company.getRandom()
+						setTopScoreAchievement(company, value)
+					else if finalScore >= 9
+						finalScore -= 1.05 + 0.2 * company.getRandom()
+						setTopScoreAchievement(company, value)
+					else if finalScore > 8.5 then finalScore -= 0.4 + 0.2 * company.getRandom()
+				if finalScore >= 9 then setTopScoreAchievement(company, value)
+				if finalScore isnt 10 and (game.flags.topScore and company.topScoreAchievements is 3) then finalScore = 10
+				game.score = finalScore
+				"final score: {0}".format(finalScore).log()
+				if sequelTo
+					if company.getRandom() <= 0.5 or not company.gameLog.some((g) -> g.sequelTo? )
+						if game.flags.isExtensionPack then 	Media.createExtensionPackStory(company, game)
+						else Media.createSequelStory(company, game)
+				retVal = Reviews.getReviews(game, finalScore, positiveMessages, negativeMessages)
+				GDT.fire(GameManager, GDT.eventKeys.gameplay.afterGameReview, {
+					company : company,
+					game : game,
+					reviews : retVal
+				})
+				retVal
+			generate: (game, finalScore, positiveMessages, negativeMessages) ->
+				intScore = Math.floor(finalScore).clamp(1, 10)
+				if finalScore >= 9.5 then intScore = 10
+				reviewers = GDT.Reviewer.pickReviewers(4)
+				reviews = []
+				usedMessages = []
+				scores = []
+				variation = 1
+				for reviewer in reviewers
+					if intScore is 5 or intScore is 6 then (variation = if GameManager.company.getRandom() < 0.05 then 2 else 1)
+					scoreVariation = if Math.randomSign() is 1 then 0 else variation * Math.randomSign()
+					score = (intScore + scoreVariation).clamp(1, 10)
+					if score is 10 and (scores.length is 3 and scores.average() is 10)
+						if not game.flags.psEnabled
+							if Math.floor(finalScore) < 10 or GameManager.company.getRandom() < 0.8 then score--
+						else if Math.floor(finalScore) is 10 and GameManager.company.getRandom() < 0.4 then score++
+					message = if reviewer.getMessage? then reviewer.getMessage(game, finalScore) else undefined
+					if message is undefined
+						`do {
+							if (GameManager.company.getRandom() <= 0.2)
+								if (scoreVariation >= 0 && (score > 2 && positiveMessages.length != 0))
+									message = positiveMessages.pickRandom();
+								else {
+									if (scoreVariation < 0 && (score < 6 && negativeMessages != 0))
+										message = negativeMessages.pickRandom()
+								}
+							else
+								message = undefined;
+							if (!message)
+								message = Reviews.getGenericReviewMessage(game, score)
+						} while (usedMessages.weakIndexOf(message) != -1)`
+					usedMessages.push(message)
+					scores.push(score)
+					reviews.push {
+						score : score,
+						message : message,
+						reviewerName : reviewer.name
+					}
+				reviews
+			getById: (id) -> GDT.Reviewer.getAll().first((r) -> r.id is id)
+			getMessageById: (id) -> GDT.Reviewer.getAllMessages.first((m) -> m.id is id)
+		}
+		GDT.Reviewer.reviewers.forEach((e, i) -> GDT.Reviewer.reviewers[i] = {name: e, id: e.replace(' ', '')})
 	)()
 
 	GDT.ModSupport = ( ->
