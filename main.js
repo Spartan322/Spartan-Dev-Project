@@ -6,8 +6,27 @@ All types can either contain the name of the types as found here or the vanilla 
 @customType ResearchItem
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
+@attribute [String] type The SDP.GDT.Research.types string this represents
+@instruction('optional' if 'v')
+	@attribute [Integer] pointsCost The cost of the research in research points
+	@attribute [Integer] duration The time it takes to complete the research in milliseconds
+	@attribute [Integer] researchCost The cost this research will take to research, without devCost, small scale devCost = researchCost * 4
+	@instruction('optional' if 'researchCost') @attribute [Integer] devCost The cost to develop with this research on in small scale
+	@attribute [Integer] engineCost The cost to put this into an engine
+	@defaults(pointsCost) @attribute [Integer] enginePoints The amount of points this will cost to put in an engine
 @attribute [String] category The SDP.Constants.ResearchCategory of the object
 @attribute [String] categoryDisplayName Similar to category except may also be
+@optional
+	@attribute [Integer] v A basic value to scale the research by
+	@attribute [String] group The group to assign this research to, prevents more then one group being selected on games
+	@attribute [Boolean] consolePart Whether this research applies to console creation as well
+	@attribute [Boolean] engineStart Whether the research is available to all engines without research, overrides canResearch to always return false
+	@attribute [Function(Game)] canUse Determines whether this research can be used
+		@fparam [Game] game The game to test use against
+		@freturn [Boolean] Whether the research can be used
+	@attribute [Function(CompanyItem)] canResearch Determines whether this research is allowed to be researched
+		@fparam [CompanyItem] company The company to check whether its researchable for
+		@freturn [Boolean] Whether the research can be researched
 ---
 @customType PlatformItem
 @attribute [String] id The unique id of the item
@@ -1344,6 +1363,11 @@ SDP.Functional.addResearchItem = function(item) {
   if (item.type == null) {
     item.type = 'engine';
   }
+  if (item.type === 'engine' && item.engineStart) {
+    item.canResearch = function() {
+      return false;
+    };
+  }
   if (Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) && Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())) {
     SDP.GDT.Research.researches.push(item);
     GDT.Research.engineItems(item);
@@ -1822,6 +1846,50 @@ SDP.GDT = (function() {
     }
   };
   Research.getAllItems = GDT.Research.getAll;
+  (function() {
+    var oldResearchDevCost, oldResearchDuration, oldResearchEngineCost, oldResearchPointsCost, oldResearchResearchCost;
+    oldResearchPointsCost = Research.getPointsCost;
+    Research.getPointsCost = function(r) {
+      if (r.pointsCost) {
+        return r.pointsCost;
+      }
+      return oldResearchPointsCost(r);
+    };
+    oldResearchDuration = Research.getDuration;
+    Research.getDuration = function(r) {
+      if (r.duration) {
+        return r.duration;
+      }
+      return oldResearchDuration(r);
+    };
+    oldResearchDevCost = Research.getDevCost;
+    Research.getDevCost = function(r, game) {
+      var value;
+      if (r.devCost) {
+        value = r.devCost;
+        if (game) {
+          value *= General.getGameSizeDurationFactor(game.gameSize) * General.getMultiPlatformCostFactor(game);
+          value = Math.floor(value / 1e3) * 1e3;
+        }
+        return value;
+      }
+      return oldResearchDevCost(r, game);
+    };
+    oldResearchResearchCost = Research.getResearchCost;
+    Research.getResearchCost = function(r) {
+      if (r.researchCost) {
+        r.researchCost;
+      }
+      return oldResearchResearchCost(r);
+    };
+    oldResearchEngineCost = Research.getEngineCost;
+    return Research.getEngineCost = function(r) {
+      if (r.engineCost) {
+        return r.engineCost;
+      }
+      return oldResearchEngineCost(r);
+    };
+  })();
   GameManager.getAvailableGameFeatures = GDT.Research.getAvailable;
   General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts;
   GDT.Platform = {
@@ -2260,7 +2328,7 @@ SDP.GDT = (function() {
         return results;
       },
       generate: function(company, max) {
-        var allPlatforms, audience, audiences, basePay, count, diffculty, excludes, genre, i, item, k, lastGame, minScore, name, pay, penalty, platform, platforms, puName, pubName, pubObject, publisher, random, ref, researchedTopics, results, royaltyRate, seed, settings, size, sizeBasePay, sizes, topic, topics;
+        var allPlatforms, audience, audiences, basePay, count, diffculty, excludes, genre, i, item, k, lastGame, minScore, name, name1, pay, penalty, platform, platforms, puName, pubName, pubObject, publisher, random, ref, researchedTopics, results, royaltyRate, seed, settings, size, sizeBasePay, sizes, topic, topics;
         settings = GDT.Contract.getSettings(company, size);
         seed = GDT.Contract.getSeed(settings);
         random = new MersenneTwister(seed);
@@ -2330,110 +2398,112 @@ SDP.GDT = (function() {
         };
         for (i = k = 0, ref = count; 0 <= ref ? k <= ref : k >= ref; i = 0 <= ref ? ++k : --k) {
           publisher = GDT.Publisher.getAvailable(company).pickRandom(random);
-          if (publisher.generateCard) {
-            item = publisher.generateCard(company);
-            topic = item.topic;
-            genre = item.genre;
-            platform = item.platform;
-            name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
+          if (publisher.generateCard || publisher.card) {
+            item = publisher.generateCard != null ? publisher.generateCard(company) : publisher.card;
+            if (item && (item.size === 'small' || (typeof company[name1 = "canDevelop" + (item.size.capitalize()) + "Games"] === "function" ? company[name1]() : void 0))) {
+              topic = item.topic;
+              genre = item.genre;
+              platform = item.platform;
+              name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
+              results.push({
+                id: 'publisherContracts',
+                refNumber: Math.floor(Math.random() * 65535),
+                type: 'gameContract',
+                name: name,
+                description: "Publisher: " + publisher.name,
+                publisher: publisher.name,
+                publisherObject: publisher,
+                topic: topic ? topic.id : topic,
+                genre: genre ? genre.id : genre,
+                platform: platform.id ? platform.id : platform,
+                gameSize: item.size,
+                gameAudience: item.audience,
+                minScore: item.minScore,
+                payment: item.pay,
+                penalty: item.penalty,
+                royaltyRate: item.royaltyRate
+              });
+              continue;
+            }
+          }
+          diffculty = 0;
+          topic = void 0;
+          genre = void 0;
+          if (random.random() <= 0.7) {
+            genre = General.getAvailableGenres(company).pickRandom(random);
+            diffculty += 0.1;
+          }
+          if (random.random() <= 0.7) {
+            do {
+							if (random.random() <= 0.7)
+								topic = topics.except(researchedTopics).pickRandom(random);
+							else
+								topic = topics.pickRandom(random);
+							if (topic === undefined)
+								break
+						} while (excludes.some(function (e) {
+							return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
+						}));
+            if (topic != null) {
+              diffculty += 0.1;
+            }
+          }
+          if (genre || topic) {
+            excludes.push({
+              genre: genre ? genre.id : void 0,
+              topic: topic ? topic.id : void 0
+            });
+          }
+          platform = void 0;
+          if (random.random() <= 0.7) {
+            platform = platforms.pickRandom(random);
+          }
+          audience = void 0;
+          if (company.canSetTargetAudience() && random.random() <= 0.2) {
+            audience = audiences.pickRandom(random);
+          }
+          difficulty += 0.8 * random.random();
+          minScore = 4 + Math.floor(5 * difficulty);
+          size = void 0;
+          do
+						size = sizes.pickRandom(random);
+					while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size));
+          basePay = sizeBasePay[size];
+          pay = Math.max(1, Math.floor((basePay * (minScore / 10)) / 5e3)) * 5e3;
+          penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random()) / 5e3) * 5e3;
+          pubObject = void 0;
+          puName = void 0;
+          if (platform && (platform.company && random.random() <= 0.2)) {
+            pubName = platform.company;
+          } else {
+            pubObject = publishers.pickRandom(random);
+            pubName = pubObject.name;
+          }
+          royaltyRate = Math.floor(7 + 8 * difficulty) / 100;
+          name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
+          if (!platform || Platforms.getPlatformsOnMarket(company).first(function(p) {
+            return p.id === platform.id;
+          })) {
             results.push({
-              id: 'publisherContracts',
+              id: "publisherContracts",
               refNumber: Math.floor(Math.random() * 65535),
-              type: 'gameContract',
+              type: "gameContract",
               name: name,
-              description: "Publisher: " + publisher.name,
-              publisher: publisher.name,
-              publisherObject: publisher,
+              description: "Publisher: {0}".localize().format(pubName),
+              publisher: pubName,
+              publisherObject: pubObject,
               topic: topic ? topic.id : topic,
               genre: genre ? genre.id : genre,
               platform: platform ? platform.id : void 0,
-              gameSize: item.size,
-              gameAudience: item.audience,
-              minScore: item.minScore,
-              payment: item.pay,
-              penalty: item.penalty,
-              royaltyRate: item.royaltyRate
+              gameSize: size,
+              gameAudience: audience,
+              minScore: minScore,
+              payment: pay,
+              penalty: penalty,
+              royaltyRate: royaltyRate
             });
           } else {
-            diffculty = 0;
-            topic = void 0;
-            genre = void 0;
-            if (random.random() <= 0.7) {
-              genre = General.getAvailableGenres(company).pickRandom(random);
-              diffculty += 0.1;
-            }
-            if (random.random() <= 0.7) {
-              do {
-								if (random.random() <= 0.7)
-									topic = topics.except(researchedTopics).pickRandom(random);
-								else
-									topic = topics.pickRandom(random);
-								if (topic === undefined)
-									break
-							} while (excludes.some(function (e) {
-								return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
-							}));
-              if (topic != null) {
-                diffculty += 0.1;
-              }
-            }
-            if (genre || topic) {
-              excludes.push({
-                genre: genre ? genre.id : void 0,
-                topic: topic ? topic.id : void 0
-              });
-            }
-            platform = void 0;
-            if (random.random() <= 0.7) {
-              platform = platforms.pickRandom(random);
-            }
-            audience = void 0;
-            if (company.canSetTargetAudience() && random.random() <= 0.2) {
-              audience = audiences.pickRandom(random);
-            }
-            difficulty += 0.8 * random.random();
-            minScore = 4 + Math.floor(5 * difficulty);
-            size = void 0;
-            do
-							size = sizes.pickRandom(random);
-						while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size));
-            basePay = sizeBasePay[size];
-            pay = Math.max(1, Math.floor((basePay * (minScore / 10)) / 5e3)) * 5e3;
-            penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random()) / 5e3) * 5e3;
-            pubObject = void 0;
-            puName = void 0;
-            if (platform && (platform.company && random.random() <= 0.2)) {
-              pubName = platform.company;
-            } else {
-              pubObject = publishers.pickRandom(random);
-              pubName = pubObject.name;
-            }
-            royaltyRate = Math.floor(7 + 8 * difficulty) / 100;
-            name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
-            if (!platform || Platforms.getPlatformsOnMarket(company).first(function(p) {
-              return p.id === platform.id;
-            })) {
-              results.push({
-                id: "publisherContracts",
-                refNumber: Math.floor(Math.random() * 65535),
-                type: "gameContract",
-                name: name,
-                description: "Publisher: {0}".localize().format(pubName),
-                publisher: pubName,
-                publisherObject: pubObject,
-                topic: topic ? topic.id : topic,
-                genre: genre ? genre.id : genre,
-                platform: platform ? platform.id : void 0,
-                gameSize: size,
-                gameAudience: audience,
-                minScore: minScore,
-                payment: pay,
-                penalty: penalty,
-                royaltyRate: royaltyRate
-              });
-            } else {
-              count++;
-            }
+            count++;
           }
         }
         return results;

@@ -4,8 +4,27 @@ All types can either contain the name of the types as found here or the vanilla 
 @customType ResearchItem
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
+@attribute [String] type The SDP.GDT.Research.types string this represents
+@instruction('optional' if 'v')
+	@attribute [Integer] pointsCost The cost of the research in research points
+	@attribute [Integer] duration The time it takes to complete the research in milliseconds
+	@attribute [Integer] researchCost The cost this research will take to research, without devCost, small scale devCost = researchCost * 4
+	@instruction('optional' if 'researchCost') @attribute [Integer] devCost The cost to develop with this research on in small scale
+	@attribute [Integer] engineCost The cost to put this into an engine
+	@defaults(pointsCost) @attribute [Integer] enginePoints The amount of points this will cost to put in an engine
 @attribute [String] category The SDP.Constants.ResearchCategory of the object
 @attribute [String] categoryDisplayName Similar to category except may also be
+@optional
+	@attribute [Integer] v A basic value to scale the research by
+	@attribute [String] group The group to assign this research to, prevents more then one group being selected on games
+	@attribute [Boolean] consolePart Whether this research applies to console creation as well
+	@attribute [Boolean] engineStart Whether the research is available to all engines without research, overrides canResearch to always return false
+	@attribute [Function(Game)] canUse Determines whether this research can be used
+		@fparam [Game] game The game to test use against
+		@freturn [Boolean] Whether the research can be used
+	@attribute [Function(CompanyItem)] canResearch Determines whether this research is allowed to be researched
+		@fparam [CompanyItem] company The company to check whether its researchable for
+		@freturn [Boolean] Whether the research can be researched
 ---
 @customType PlatformItem
 @attribute [String] id The unique id of the item
@@ -864,6 +883,7 @@ SDP.Functional = {}
 SDP.Functional.addResearchItem = (item) ->
 	Checks = SDP.Util.Check
 	unless item.type? then item.type = 'engine'
+	if item.type is 'engine' and item.engineStart then item.canResearch = -> false
 	if Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())
 		SDP.GDT.Research.researches.push(item)
 		GDT.Research.engineItems(item)
@@ -1169,6 +1189,33 @@ SDP.GDT = ( ->
 		getById: (id) -> GDT.Research.getAll().first((r) -> r.id is id)
 	}
 	Research.getAllItems = GDT.Research.getAll
+	( ->
+		oldResearchPointsCost = Research.getPointsCost
+		Research.getPointsCost = (r) ->
+			if r.pointsCost then return r.pointsCost
+			return oldResearchPointsCost(r)
+		oldResearchDuration = Research.getDuration
+		Research.getDuration = (r) ->
+			if r.duration then return r.duration
+			return oldResearchDuration(r)
+		oldResearchDevCost = Research.getDevCost
+		Research.getDevCost = (r, game) ->
+			if r.devCost
+				value = r.devCost
+				if game
+					value *= General.getGameSizeDurationFactor(game.gameSize) * General.getMultiPlatformCostFactor(game)
+					value = Math.floor(value / 1e3) * 1e3
+				return value
+			return oldResearchDevCost(r, game)
+		oldResearchResearchCost = Research.getResearchCost
+		Research.getResearchCost = (r) ->
+			if r.researchCost then r.researchCost
+			return oldResearchResearchCost(r)
+		oldResearchEngineCost = Research.getEngineCost
+		Research.getEngineCost = (r) ->
+			if r.engineCost then return r.engineCost
+			return oldResearchEngineCost(r)
+	)()
 	GameManager.getAvailableGameFeatures = GDT.Research.getAvailable
 	General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts
 
@@ -1572,95 +1619,96 @@ SDP.GDT = ( ->
 				sizeBasePay = { medium: 15e4, large: 15e5 / 2 }
 				for i in [0..count]
 					publisher = GDT.Publisher.getAvailable(company).pickRandom(random)
-					if publisher.generateCard
-						item = publisher.generateCard(company)
-						topic = item.topic
-						genre = item.genre
-						platform = item.platform
-						name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+					if publisher.generateCard or publisher.card
+						item = if publisher.generateCard? then publisher.generateCard(company) else publisher.card
+						if item and (item.size is 'small' or company["canDevelop#{item.size.capitalize()}Games"]?())
+							topic = item.topic
+							genre = item.genre
+							platform = item.platform
+							name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+							results.push {
+								id: 'publisherContracts'
+								refNumber: Math.floor(Math.random() * 65535)
+								type: 'gameContract'
+								name: name
+								description: "Publisher: #{publisher.name}"
+								publisher: publisher.name
+								publisherObject: publisher
+								topic: if topic then topic.id else topic
+								genre: if genre then genre.id else genre
+								platform: if platform.id then platform.id else platform
+								gameSize: item.size,
+								gameAudience: item.audience,
+								minScore: item.minScore,
+								payment: item.pay,
+								penalty: item.penalty,
+								royaltyRate: item.royaltyRate
+							}
+							continue
+					diffculty = 0
+					topic = undefined
+					genre = undefined
+					if random.random() <= 0.7
+						genre = General.getAvailableGenres(company).pickRandom(random)
+						diffculty += 0.1
+					if random.random() <= 0.7
+						`do {
+							if (random.random() <= 0.7)
+								topic = topics.except(researchedTopics).pickRandom(random);
+							else
+								topic = topics.pickRandom(random);
+							if (topic === undefined)
+								break
+						} while (excludes.some(function (e) {
+							return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
+						}))`
+						if topic? then diffculty += 0.1
+					if genre or topic then excludes.push {
+							genre: if genre then genre.id else undefined
+							topic: if topic then topic.id else undefined
+						}
+					platform = undefined
+					if random.random() <= 0.7 then platform = platforms.pickRandom(random)
+					audience = undefined
+					if company.canSetTargetAudience() and  random.random() <= 0.2 then audience = audiences.pickRandom(random)
+					difficulty += 0.8 * random.random()
+					minScore = 4 + Math.floor(5 * difficulty)
+					size = undefined
+					`do
+						size = sizes.pickRandom(random);
+					while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size))`
+					basePay = sizeBasePay[size]
+					pay = Math.max(1, Math.floor((basePay * (minScore / 10))/5e3)) * 5e3
+					penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random())/5e3) * 5e3
+					pubObject = undefined
+					puName = undefined
+					if platform and (platform.company and random.random() <= 0.2) then pubName = platform.company
+					else
+						pubObject = publishers.pickRandom(random)
+						pubName = pubObject.name
+					royaltyRate = Math.floor(7 + 8 * difficulty) / 100
+					name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
+					if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
 						results.push {
-							id: 'publisherContracts'
+							id: "publisherContracts"
 							refNumber: Math.floor(Math.random() * 65535)
-							type: 'gameContract'
+							type: "gameContract"
 							name: name
-							description: "Publisher: #{publisher.name}"
-							publisher: publisher.name
-							publisherObject: publisher
+							description: "Publisher: {0}".localize().format(pubName)
+							publisher: pubName
+							publisherObject: pubObject
 							topic: if topic then topic.id else topic
 							genre: if genre then genre.id else genre
 							platform: if platform then platform.id else undefined
-							gameSize: item.size,
-							gameAudience: item.audience,
-							minScore: item.minScore,
-							payment: item.pay,
-							penalty: item.penalty,
-							royaltyRate: item.royaltyRate
+							gameSize: size
+							gameAudience: audience
+							minScore: minScore
+							payment: pay
+							penalty: penalty
+							royaltyRate: royaltyRate
 						}
 					else
-						diffculty = 0
-						topic = undefined
-						genre = undefined
-						if random.random() <= 0.7
-							genre = General.getAvailableGenres(company).pickRandom(random)
-							diffculty += 0.1
-						if random.random() <= 0.7
-							`do {
-								if (random.random() <= 0.7)
-									topic = topics.except(researchedTopics).pickRandom(random);
-								else
-									topic = topics.pickRandom(random);
-								if (topic === undefined)
-									break
-							} while (excludes.some(function (e) {
-								return (genre === undefined || e.genre === genre.id) && e.topic === topic.id
-							}))`
-							if topic? then diffculty += 0.1
-						if genre or topic then excludes.push {
-								genre: if genre then genre.id else undefined
-								topic: if topic then topic.id else undefined
-							}
-						platform = undefined
-						if random.random() <= 0.7 then platform = platforms.pickRandom(random)
-						audience = undefined
-						if company.canSetTargetAudience() and  random.random() <= 0.2 then audience = audiences.pickRandom(random)
-						difficulty += 0.8 * random.random()
-						minScore = 4 + Math.floor(5 * difficulty)
-						size = undefined
-						`do
-							size = sizes.pickRandom(random);
-						while (platform != undefined && !Platforms.doesPlatformSupportGameSize(platform, size))`
-						basePay = sizeBasePay[size]
-						pay = Math.max(1, Math.floor((basePay * (minScore / 10))/5e3)) * 5e3
-						penalty = Math.floor((pay * 1.2 + pay * 1.8 * random.random())/5e3) * 5e3
-						pubObject = undefined
-						puName = undefined
-						if platform and (platform.company and random.random() <= 0.2) then pubName = platform.company
-						else
-							pubObject = publishers.pickRandom(random)
-							pubName = pubObject.name
-						royaltyRate = Math.floor(7 + 8 * difficulty) / 100
-						name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
-						if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
-							results.push {
-								id: "publisherContracts"
-								refNumber: Math.floor(Math.random() * 65535)
-								type: "gameContract"
-								name: name
-								description: "Publisher: {0}".localize().format(pubName)
-								publisher: pubName
-								publisherObject: pubObject
-								topic: if topic then topic.id else topic
-								genre: if genre then genre.id else genre
-								platform: if platform then platform.id else undefined
-								gameSize: size
-								gameAudience: audience
-								minScore: minScore
-								payment: pay
-								penalty: penalty
-								royaltyRate: royaltyRate
-							}
-						else
-							count++
+						count++
 				results
 			getById: (id) -> GDT.Publisher.getAll().first((p) -> p.id is id)
 		}
