@@ -78,6 +78,18 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
 @attribute [String] description The description of the contract
+@attribute [String] size The size of the contract, either small, medium, or large
+@attribute [Float] tF The tech factor of the contract
+@attribute [Float] dF The design factor of the contract
+@optional
+	@attribute [Function(CompanyItem, MersenneTwister)] generateCard Generates a contract card depending on the company and random
+		@fparam [CompanyItem] company The company to generate the card for
+		@fparam [MersenneTwister] random The random object used for generating the contract
+		@freturn [ContractCardItem] The card item representing the contract generated
+	@attribute [ContractCardItem] card The card item to repsent the contract definitely (generateCard takes priority)
+@note generateCard and card can be ignored if tF and dF are supplied and vice versa
+@optional
+	@attribute [Float] rF The research factor generated
 ---
 @customType PublisherItem
 @attribute [String] id The unique id of the item
@@ -97,6 +109,17 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] image The image uri for the notification
 @attribute [String] sourceId The id of the corresponding event object
 @attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+---
+@customType ContractCardItem
+@optional
+	@attribute [Integer] techPoints The tech points to generate for the contract (overrides tF)
+	@attribute [Integer] designPoints The design points to generate for the contract (overrides dF)
+	@attribute [Float] tF The tech factor generated for the card
+	@attribute [Float] dF The design factor generated for the card
+	@attribute [Integer] minPoints The minimum points to generate based on factors (ignored if techPoints and designPoints supplied)
+	@attribute [Integer] pay The pay available upon the contract's completion
+	@attribute [Integer] penalty The penalty for job failure
+	@attribute [Integer] weeks The amount of weeks determined to finish the contracts
  */
 var Companies, JobApplicants, SDP, __notificationRep, classes, style,
   slice = [].slice,
@@ -1358,7 +1381,7 @@ SDP.Constants = {
 SDP.Functional = {};
 
 SDP.Functional.addResearchItem = function(item) {
-  var Checks;
+  var Checks, requirments;
   Checks = SDP.Util.Check;
   if (item.type == null) {
     item.type = 'engine';
@@ -1368,9 +1391,15 @@ SDP.Functional.addResearchItem = function(item) {
       return false;
     };
   }
-  if (Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) && Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())) {
+  requirments = ['id', 'name', 'category', 'categoryDisplayName'];
+  if (item.v != null) {
+    requirements.push('pointsCost', 'duration', 'researchCost', 'engineCost');
+  } else {
+    requirements.push('v');
+  }
+  if (Checks.propertiesPresent(item, requirements) && Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())) {
     SDP.GDT.Research.researches.push(item);
-    GDT.Research.engineItems(item);
+    Research.engineItems.push(item);
   }
 };
 
@@ -1514,7 +1543,7 @@ SDP.Functional.addReviewerItem = function(item) {
 };
 
 SDP.Functional.addNotificationToQueue = function(item) {
-  var ref, ref1, ref2;
+  var ref;
   if (SDP.Util.isString(item)) {
     item = item.split('\n');
     if (item.length === 1) {
@@ -1540,8 +1569,8 @@ SDP.Functional.addNotificationToQueue = function(item) {
   }
   if (!item instanceof Notification) {
     item = new Notification({
-      header: (ref = item.header) != null ? ref : '?',
-      text: (ref1 = item.text) != null ? ref1 : '?',
+      header: item.header,
+      text: item.text,
       buttonText: item.buttonText,
       weeksUntilFired: item.weeksUntilFired,
       image: item.image,
@@ -1549,10 +1578,10 @@ SDP.Functional.addNotificationToQueue = function(item) {
       sourceId: item.sourceId
     });
   }
-  if ((typeof GameManager !== "undefined" && GameManager !== null ? (ref2 = GameManager.company) != null ? ref2.notifications : void 0 : void 0) != null) {
+  if ((typeof GameManager !== "undefined" && GameManager !== null ? (ref = GameManager.company) != null ? ref.notifications : void 0 : void 0) != null) {
     return GameManager.company.notifications.push(item);
   } else {
-    return SDP.GDT.Internal.notificationsToTrigger.push(item);
+    return SDP.GDT.Notification.queue.push(item);
   }
 };
 
@@ -2169,36 +2198,76 @@ SDP.GDT = (function() {
         return settings.seed;
       },
       createFromTemplate: function(company, template, random) {
-        var d, minPoints, pay, penalty, pointPart, points, r, t, weeks;
+        var d, dF, item, minPoints, pay, penalty, pointPart, points, r, t, tF, weeks;
+        item = template.generateCard != null ? template.generateCard(company, random) : template.card;
         r = random.random();
         if (random.random > 0.8) {
           r += random.random();
         }
-        minPoints = (function() {
-          switch (template.size) {
-            case 'small':
-              return 11;
-            case 'medium':
-              return 30;
-            case 'large':
-              return 100;
-          }
-        })();
-        if (minPoints === 12 && company.staff.length > 2) {
-          minPoints += 6;
+        t = void 0;
+        d = void 0;
+        pay = void 0;
+        weeks = void 0;
+        penalty = void 0;
+        if (item.techPoints) {
+          t = item.techPoints;
         }
-        minPoints += minPoints * (company.getCurrentDate().year / 25);
-        points = minPoints + minPoints * r;
-        pointPart = points / (template.dF + template.tF);
-        d = pointPart * template.dF;
-        t = pointPart * template.tF;
-        d += d * 0.2 * random.random() * random.randomSign();
-        t += t * 0.2 * random.random() * random.randomSign();
-        d = Math.floor(d);
-        t = Math.floor(t);
-        pay = Math.floor(points * 1e3 / 1e3) * 1e3;
-        weeks = template.size === small ? Math.floor(3 + 3 * random.random()) : Math.floor(3 + 7 * random.random());
-        penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random()) / 1e3) * 1e3;
+        if (item.designPoints) {
+          d = item.designPoints;
+        }
+        if (item.payment) {
+          pay = item.payment;
+        }
+        if (item.weeks) {
+          weeks = item.weeks;
+        }
+        if (item.penalty) {
+          penalty = item.penalty;
+        }
+        if (!(t && d && pay && weeks && penalty)) {
+          minPoints = void 0;
+          tF = template.tF || item.tF;
+          dF = template.dF || item.dF;
+          if (!(t && d && !item.minPoints)) {
+            minPoints = item.minPoints;
+          } else {
+            minPoints = (function() {
+              switch (template.size) {
+                case 'small':
+                  return 11;
+                case 'medium':
+                  return 30;
+                case 'large':
+                  return 100;
+              }
+            })();
+            if (minPoints === 12 && company.staff.length > 2) {
+              minPoints += 6;
+            }
+            minPoints += minPoints * (company.getCurrentDate().year / 25);
+          }
+          points = minPoints + minPoints * r;
+          pointPart = points / (dF + tF);
+          if (!d) {
+            d = pointPart * dF;
+            d += d * 0.2 * random.random() * random.randomSign();
+            d = Math.floor(d);
+          }
+          if (!t) {
+            t = pointPart * tF;
+            t += t * 0.2 * random.random() * random.randomSign();
+            t = Math.floor(t);
+          }
+          if (!pay) {
+            pay = Math.floor(points * 1e3 / 1e3) * 1e3;
+          }
+          if (!weeks) {
+            weeks = template.size === small ? Math.floor(3 + 3 * random.random()) : Math.floor(3 + 7 * random.random());
+          }
+          if (!penalty) {
+            penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random()) / 1e3) * 1e3;
+          }
+        }
         return {
           name: template.name,
           description: template.description,
@@ -3008,6 +3077,9 @@ SDP.GDT = (function() {
       };
     });
   })();
+  GDT.Notification = {
+    queue: []
+  };
   GDT.ModSupport = (function() {
     var ModSupport, oldLoad;
     ModSupport = {};

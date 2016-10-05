@@ -76,6 +76,18 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
 @attribute [String] description The description of the contract
+@attribute [String] size The size of the contract, either small, medium, or large
+@attribute [Float] tF The tech factor of the contract
+@attribute [Float] dF The design factor of the contract
+@optional
+	@attribute [Function(CompanyItem, MersenneTwister)] generateCard Generates a contract card depending on the company and random
+		@fparam [CompanyItem] company The company to generate the card for
+		@fparam [MersenneTwister] random The random object used for generating the contract
+		@freturn [ContractCardItem] The card item representing the contract generated
+	@attribute [ContractCardItem] card The card item to repsent the contract definitely (generateCard takes priority)
+@note generateCard and card can be ignored if tF and dF are supplied and vice versa
+@optional
+	@attribute [Float] rF The research factor generated
 ---
 @customType PublisherItem
 @attribute [String] id The unique id of the item
@@ -95,6 +107,17 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] image The image uri for the notification
 @attribute [String] sourceId The id of the corresponding event object
 @attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+---
+@customType ContractCardItem
+@optional
+	@attribute [Integer] techPoints The tech points to generate for the contract (overrides tF)
+	@attribute [Integer] designPoints The design points to generate for the contract (overrides dF)
+	@attribute [Float] tF The tech factor generated for the card
+	@attribute [Float] dF The design factor generated for the card
+	@attribute [Integer] minPoints The minimum points to generate based on factors (ignored if techPoints and designPoints supplied)
+	@attribute [Integer] pay The pay available upon the contract's completion
+	@attribute [Integer] penalty The penalty for job failure
+	@attribute [Integer] weeks The amount of weeks determined to finish the contracts
 ###
 style = require('./lib-js/style')
 
@@ -884,9 +907,11 @@ SDP.Functional.addResearchItem = (item) ->
 	Checks = SDP.Util.Check
 	unless item.type? then item.type = 'engine'
 	if item.type is 'engine' and item.engineStart then item.canResearch = -> false
-	if Checks.propertiesPresent(item, ['id', 'name', 'category', 'categoryDisplayName']) and Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())
+	requirments = ['id', 'name', 'category', 'categoryDisplayName']
+	if item.v? then requirements.push('pointsCost','duration','researchCost','engineCost') else requirements.push('v')
+	if Checks.propertiesPresent(item, requirements) and Checks.uniqueness(item, 'id', SDP.GDT.Research.getAll())
 		SDP.GDT.Research.researches.push(item)
-		GDT.Research.engineItems(item)
+		Research.engineItems.push(item)
 	return
 
 SDP.Functional.addStartResearch = (item) ->
@@ -1016,15 +1041,15 @@ SDP.Functional.addNotificationToQueue = (item) ->
 	item.text = '?' unless item.text?
 	if not item instanceof Notification
 		item = new Notification {
-			header: item.header ? '?'
-			text: item.text ? '?'
+			header: item.header
+			text: item.text
 			buttonText: item.buttonText
 			weeksUntilFired: item.weeksUntilFired
 			image: item.image
 			options: item.options.slice(0, 3)
 			sourceId: item.sourceId
 		}
-	if GameManager?.company?.notifications? then GameManager.company.notifications.push(item) else SDP.GDT.Internal.notificationsToTrigger.push(item)
+	if GameManager?.company?.notifications? then GameManager.company.notifications.push(item) else SDP.GDT.Notification.queue.push(item)
 
 SDP.Class = (
 	classes = {}
@@ -1441,25 +1466,43 @@ SDP.GDT = ( ->
 					settings.intialSettings = false
 				settings.seed
 			createFromTemplate: (company, template, random) ->
+				item = if template.generateCard? then template.generateCard(company, random) else template.card
 				r = random.random()
 				if random.random > 0.8 then r+= random.random()
-				minPoints = switch template.size
-					when 'small' then 11
-					when 'medium' then 30
-					when 'large' then 100
-				minPoints += 6 if minPoints is 12 and company.staff.length > 2
-				minPoints += minPoints * (company.getCurrentDate().year / 25)
-				points = minPoints + minPoints * r
-				pointPart = points / (template.dF + template.tF)
-				d = pointPart * template.dF
-				t = pointPart * template.tF
-				d += d * 0.2 * random.random() * random.randomSign()
-				t += t * 0.2 * random.random() * random.randomSign()
-				d = Math.floor(d)
-				t = Math.floor(t)
-				pay = Math.floor(points*1e3/1e3) * 1e3
-				weeks = if template.size is small then Math.floor(3 + 3 * random.random()) else Math.floor(3 + 7 * random.random())
-				penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random())/1e3) * 1e3
+				t = undefined
+				d = undefined
+				pay = undefined
+				weeks = undefined
+				penalty = undefined
+				if item.techPoints then t = item.techPoints
+				if item.designPoints then d = item.designPoints
+				if item.payment then pay = item.payment
+				if item.weeks then weeks = item.weeks
+				if item.penalty then penalty = item.penalty
+				unless t and d and pay and weeks and penalty
+					minPoints = undefined
+					tF = template.tF or item.tF
+					dF = template.dF or item.dF
+					unless t and d and not item.minPoints then minPoints = item.minPoints else
+						minPoints = switch template.size
+							when 'small' then 11
+							when 'medium' then 30
+							when 'large' then 100
+						minPoints += 6 if minPoints is 12 and company.staff.length > 2
+						minPoints += minPoints * (company.getCurrentDate().year / 25)
+					points = minPoints + minPoints * r
+					pointPart = points / (dF + tF)
+					unless d
+						d = pointPart * dF
+						d += d * 0.2 * random.random() * random.randomSign()
+						d = Math.floor(d)
+					unless t
+						t = pointPart * tF
+						t += t * 0.2 * random.random() * random.randomSign()
+						t = Math.floor(t)
+					unless pay then pay = Math.floor(points*1e3/1e3) * 1e3
+					unless weeks then (weeks = if template.size is small then Math.floor(3 + 3 * random.random()) else Math.floor(3 + 7 * random.random()))
+					unless penalty then penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random())/1e3) * 1e3
 				{
 					name: template.name
 					description: template.description
@@ -2024,6 +2067,10 @@ SDP.GDT = ( ->
 		}
 		GDT.Reviewer.reviewers.forEach((e, i) -> GDT.Reviewer.reviewers[i] = {name: e, id: e.replace(' ', '')})
 	)()
+
+	GDT.Notification = {
+		queue: []
+	}
 
 	GDT.ModSupport = ( ->
 		ModSupport = {}
