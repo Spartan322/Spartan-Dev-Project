@@ -121,9 +121,10 @@ All types can either contain the name of the types as found here or the vanilla 
 	@attribute [Integer] penalty The penalty for job failure
 	@attribute [Integer] weeks The amount of weeks determined to finish the contracts
  */
-var Companies, JobApplicants, SDP, __notificationRep, classes, style,
+var Base, Companies, JobApplicants, SDP, classes, convertClasses, style,
   slice = [].slice,
-  bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+  extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
+  hasProp = {}.hasOwnProperty;
 
 style = require('./lib-js/style');
 
@@ -368,7 +369,7 @@ SDP.Util = (function() {
         return fsys.path.normalize(joined);
       },
       relative: function(from, to) {
-        var fromCode, fromEnd, fromLen, fromStart, i, k, l, lastCommonSep, length, out, ref, ref1, ref2, ref3, ref4, ref5, ref6, ref7, toCode, toEnd, toLen, toStart, u, x;
+        var fromCode, fromEnd, fromLen, fromStart, i, k, l, lastCommonSep, length, out, q, ref, ref1, ref2, ref3, ref4, ref5, ref6, ref7, toCode, toEnd, toLen, toStart, u;
         assertPath(from);
         assertPath(to);
         if (from === to) {
@@ -398,7 +399,7 @@ SDP.Util = (function() {
         length = fromLen < toLen ? fromLen : toLen;
         lastCommonSep = -1;
         i = 0;
-        for (i = u = ref4 = i, ref5 = length; ref4 <= ref5 ? u <= ref5 : u >= ref5; i = ref4 <= ref5 ? ++u : --u) {
+        for (i = q = ref4 = i, ref5 = length; ref4 <= ref5 ? q <= ref5 : q >= ref5; i = ref4 <= ref5 ? ++q : --q) {
           if (i === length) {
             if (toLen > length) {
               if (to.charCodeAt(toStart + i) === 47) {
@@ -424,7 +425,7 @@ SDP.Util = (function() {
           }
         }
         out = '';
-        for (i = x = ref6 = fromStart + lastCommonSep + 1, ref7 = fromEnd; ref6 <= ref7 ? x <= ref7 : x >= ref7; i = ref6 <= ref7 ? ++x : --x) {
+        for (i = u = ref6 = fromStart + lastCommonSep + 1, ref7 = fromEnd; ref6 <= ref7 ? u <= ref7 : u >= ref7; i = ref6 <= ref7 ? ++u : --u) {
           if (i === fromEnd || from.charCodeAt(i) === 47) {
             if (out.length === 0) {
               out += '..';
@@ -794,7 +795,7 @@ SDP.Util = (function() {
 
       Path.prototype.cd = function(to) {
         var uri;
-        uri = fsys.path.resolve(this.get, to);
+        uri = fsys.path.resolve(this.get(), to);
         fsys.Path.check(uri);
         return this.get = function() {
           fsys.Path.check(uri);
@@ -803,27 +804,31 @@ SDP.Util = (function() {
       };
 
       Path.prototype.basename = function(ext) {
-        return fsys.path.basename(this.get, ext);
+        return fsys.path.basename(this.get(), ext);
       };
 
       Path.prototype.dirname = function() {
-        return fsys.path.dirname(this.get);
+        return fsys.path.dirname(this.get());
       };
 
       Path.prototype.extname = function() {
-        return fsys.path.extname(this.get);
+        return fsys.path.extname(this.get());
       };
 
       Path.prototype.parse = function() {
-        return fsys.path.parse(this.get);
+        return fsys.path.parse(this.get());
       };
 
       Path.prototype.isFile = function() {
-        return fs.lstatSync(this.get).isFile();
+        return fs.lstatSync(this.get()).isFile();
       };
 
       Path.prototype.isDirectory = function() {
-        return fs.lstatSync(this.get).isDirectory();
+        return fs.lstatSync(this.get()).isDirectory();
+      };
+
+      Path.prototype.convert = function() {
+        return this.get();
       };
 
       return Path;
@@ -1585,53 +1590,178 @@ SDP.Functional.addNotificationToQueue = function(item) {
   }
 };
 
-SDP.Class = (classes = {}, classes.Research = (function() {
-  function Research() {}
+SDP.Class = (classes = {}, convertClasses = function(classObj) {
+  var i;
+  switch (classObj.constructor) {
+    case SDP.Util.Date:
+    case SDP.Util.Weight:
+    case SDP.Util.Filesystem.Path:
+      return classObj.convert();
+    case Array:
+      for (i in classObj) {
+        classObj[i] = convertClasses(classObj[i]);
+      }
+      return classObj;
+    default:
+      return classObj;
+  }
+}, Base = (function() {
+  function Base() {
+    var arg, args, k, len, ref;
+    args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+    if (SDP.Util.isObject(args[0])) {
+      ref = args[0];
+      for (k = 0, len = ref.length; k < len; k++) {
+        arg = ref[k];
+        if (args[0].hasOwnProperty(arg)) {
+          this[arg] = args[0][arg];
+        }
+      }
+      this.wasNativeObject = true;
+    } else {
+      this.wasNativeObject = false;
+    }
+    if (this.id == null) {
+      this.id = this.name;
+    }
+  }
+
+  return Base;
+
+})(), classes.Research = (function(superClass) {
+  extend(Research, superClass);
+
+  function Research(name1, type1, category1, categoryDisplayName, id1) {
+    this.name = name1;
+    this.type = type1;
+    this.category = category1;
+    this.categoryDisplayName = categoryDisplayName != null ? categoryDisplayName : this.category;
+    this.id = id1;
+    Research.__super__.constructor.apply(this, arguments);
+  }
+
+  Research.prototype.convert = function() {
+    var item;
+    return item = {
+      name: this.name,
+      id: this.id,
+      type: this.type,
+      v: this.v,
+      pointsCost: this.pointsCost,
+      duration: this.duration,
+      researchCost: this.researchCost,
+      devCost: this.devCost,
+      engineCost: this.engineCost,
+      enginePoints: this.enginePoints,
+      category: this.category,
+      categoryDisplayName: this.categoryDisplayName,
+      group: this.group,
+      consolePart: this.consolePart,
+      engineStart: this.engineStart,
+      canUse: this.canUse != null ? this.canUse.bind(item) : void 0,
+      canResearch: this.canResearch != null ? this.canResearch.bind(item) : void 0
+    };
+  };
 
   return Research;
 
-})(), classes.Platform = (function() {
-  function Platform(name1, companyId, id1) {
+})(Base), classes.Platform = (function(superClass) {
+  extend(Platform, superClass);
+
+  function Platform(name1, company1, id1) {
     this.name = name1;
-    this.companyId = companyId;
+    this.company = company1;
     this.id = id1 != null ? id1 : this.name;
-    this.startAmount = 0;
-    this.unitsSold = 0;
-    this.licensePrice = 0;
-    this.publishDate = new SDP.Util.Date(false);
-    this.retireDate = new SDP.Util.Date(true);
-    this.devCost = 0;
-    this.techLevel = 0;
-    this.iconUri = new SDP.Util.Filesystem.Path();
-    this.imageDates = [];
+    Platform.__super__.constructor.apply(this, arguments);
+    if (this.startAmount == null) {
+      this.startAmount = 0;
+    }
+    if (this.unitsSold == null) {
+      this.unitsSold = 0;
+    }
+    if (this.audienceWeight == null) {
+      this.audienceWeight = new SDP.Util.Weight(true);
+    }
+    if (this.genreWeight == null) {
+      this.genreWeight = new SDP.Util.Weight(false);
+    }
+    if (this.licensePrice == null) {
+      this.licensePrice = 0;
+    }
+    if (this.publishDate == null) {
+      this.publishDate = new SDP.Util.Date(false);
+    }
+    if (this.retireDate == null) {
+      this.retireDate = new SDP.Util.Date(true);
+    }
+    if (this.devCost == null) {
+      this.devCost = 0;
+    }
+    if (this.techLevel == null) {
+      this.techLevel = 0;
+    }
+    if (this.iconUri == null) {
+      this.iconUri = new SDP.Util.Filesystem.Path();
+    }
   }
+
+  Platform.prototype.convert = function() {
+    return {
+      name: this.name,
+      id: this.id,
+      company: this.company,
+      startAmount: this.startAmount,
+      unitsSold: this.unitsSold,
+      licensePrice: this.licensePrice,
+      publishDate: convertClasses(this.publishDate),
+      retireDate: convertClasses(this.retireDate),
+      genreWeight: convertClasses(this.genreWeight),
+      audienceWeight: convertClasses(this.audienceWeight),
+      techLevel: this.techLevel,
+      iconUri: convertClasses(this.iconUri),
+      imageDates: convertClasses(this.imageDates),
+      marketPoints: convertClasses(this.marketPoints)
+    };
+  };
 
   return Platform;
 
-})(), classes.Topic = (function() {
+})(Base), classes.Topic = (function(superClass) {
   var BASE_OVERRIDE;
+
+  extend(Topic, superClass);
 
   BASE_OVERRIDE = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
   function Topic(name1, id1) {
+    var k, len, o, ref;
     this.name = name1;
-    this.id = id1 != null ? id1 : this.name;
-    if (this.name.constructor === Object) {
-      this.id = this.name.id;
-      this.audienceWeight = new SDP.Util.Weight(this.name.audienceWeight);
-      this.genreWeight = new SDP.Util.Weight(this.name.genreWeight);
-      this.overrides = this.name.overrides || this.name.missionOverrides;
-      this.name = this.name.name;
-    } else {
+    this.id = id1;
+    Topic.__super__.constructor.apply(this, arguments);
+    if (this.audienceWeight == null) {
       this.audienceWeight = new SDP.Util.Weight(true);
+    }
+    if (this.genreWeight == null) {
       this.genreWeight = new SDP.Util.Weight(false);
+    }
+    if ((this.overrides == null) || !SDP.Util.isArray(this.overrides)) {
       this.overrides = [BASE_OVERRIDE, BASE_OVERRIDE, BASE_OVERRIDE, BASE_OVERRIDE, BASE_OVERRIDE, BASE_OVERRIDE];
+    }
+    while (this.overrides.length < 6) {
+      this.overrides.push(BASE_OVERRIDE);
+    }
+    ref = this.overrides;
+    for (k = 0, len = ref.length; k < len; k++) {
+      o = ref[k];
+      if (o.length < 9) {
+        o.push(0);
+      }
     }
   }
 
   Topic.prototype.setOverride = function(genreName, catName, value) {
     var catOrNull, positions;
-    if (SDP.Util.isArry(genreName)) {
+    if (SDP.Util.isArray(genreName)) {
       this.overrides = genreName;
       return this;
     }
@@ -1652,20 +1782,52 @@ SDP.Class = (classes = {}, classes.Research = (function() {
     return {
       name: this.name,
       id: this.id,
-      genreWeight: this.genreWeight,
-      audienceWeight: this.audienceWeight,
+      genreWeight: convertClasses(this.genreWeight),
+      audienceWeight: convertClasses(this.audienceWeight),
       overrides: this.overrides
     };
   };
 
   return Topic;
 
-})(), classes.ResearchProject = (function() {
-  function ResearchProject() {}
+})(Base), classes.ResearchProject = (function(superClass) {
+  extend(ResearchProject, superClass);
+
+  function ResearchProject(name1, description, id1) {
+    this.name = name1;
+    this.description = description;
+    this.id = id1;
+    ResearchProject.__super__.constructor.apply(this, arguments);
+    if (this.pointsCost == null) {
+      this.pointsCost = 0;
+    }
+    if (this.iconUri == null) {
+      this.iconUri = new SDP.Util.Filesystem.Path();
+    }
+    if (this.targetZone == null) {
+      this.targetZone = 2;
+    }
+  }
+
+  ResearchProject.prototype.convert = function() {
+    var item;
+    return item = {
+      name: this.name,
+      id: this.id,
+      description: this.description,
+      pointsCost: this.pointsCost,
+      iconUri: convertClasses(this.iconUri),
+      targetZone: this.targetZone,
+      repeatable: this.repeatable,
+      canResearch: this.canResearch != null ? this.canResearch.bind(item) : void 0,
+      complete: this.complete != null ? this.complete.bind(item) : void 0,
+      cancel: this.cancel != null ? this.cancel.bind(item) : void 0
+    };
+  };
 
   return ResearchProject;
 
-})(), classes.Training = (function() {
+})(Base), classes.Training = (function() {
   function Training() {}
 
   return Training;
@@ -1680,44 +1842,6 @@ SDP.Class = (classes = {}, classes.Research = (function() {
 
   return Publisher;
 
-})(), classes.Reviewer = (function() {
-  function Reviewer() {}
-
-  return Reviewer;
-
-})(), classes.ReviewMessage = (function() {
-  function ReviewMessage() {}
-
-  return ReviewMessage;
-
-})(), classes.Company = (function() {
-  var platforms;
-
-  platforms = [];
-
-  function Company(name, id) {
-    if (id == null) {
-      id = name;
-    }
-    this.getName = function() {
-      return name;
-    };
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Company.prototype.addPlatform = function(item) {
-    item.companyId = this.getId();
-    return platforms.push(item);
-  };
-
-  Company.prototype.getPlatform = function(index) {
-    return platforms[index];
-  };
-
-  return Company;
-
 })())();
 
 SDP.GDT.addEvent = function(item) {
@@ -1727,38 +1851,7 @@ SDP.GDT.addEvent = function(item) {
   if (item.event != null) {
     item = item.event;
   }
-  if ((SDP.GDT.Event != null) && item instanceof SDP.GDT.Event) {
-    item = item.toInput();
-  }
-  if ((SDP.GDT.Notification != null) && item.notification instanceof SDP.GDT.Notification) {
-    item.notification = item.notification.toInput();
-  }
   return GDT.addEvent(item);
-};
-
-SDP.GDT.addCompany = function(item) {
-  if (item.constructor === String) {
-    item = Companies.createCompany(item);
-  }
-  if ((SDP.GDT.Company != null) && item instanceof SDP.GDT.Company) {
-    item = item.toInput();
-  }
-  item.sort = function() {
-    return item.platforms.sort(function(a, b) {
-      return General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published);
-    });
-  };
-  item.addPlatform = function(platform) {
-    platform.company = item.name;
-    SDP.GDT.addPlatform(platform);
-    item.platforms.push(platform);
-    item.sort();
-    return platform;
-  };
-  if (Checks.checkPropertiesPresent(item, ['id', 'name']) && Checks.checkUniqueness(item, 'id', Companies.getAllCompanies())) {
-    Companies.moddedCompanies.push(item);
-  }
-  return item;
 };
 
 SDP.GDT = (function() {
@@ -1921,23 +2014,50 @@ SDP.GDT = (function() {
   })();
   GameManager.getAvailableGameFeatures = GDT.Research.getAvailable;
   General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts;
-  GDT.Platform = {
-    platforms: Platforms.allPlatforms,
-    getAll: function() {
-      return GDT.Platform.platforms.slice();
-    },
-    getAvailable: function(company) {
-      return GDT.Company.getPlatformsFor(company).filter(function(p) {
-        return Platforms.getRetireDate(p) > Math.floor(company.currentWeek) && !p.isCustom || p.isCustom === true && (company.currentWeek > General.getWeekFromDateString(p.published) && !p.soldOut);
-      });
-    },
-    getById: function(id) {
-      return GDT.Platform.getAll().first(function(p) {
-        return p.id === id;
-      });
-    }
-  };
-  Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable;
+  (function() {
+    var oldPlatformImage;
+    oldPlatformImage = Platforms.getPlatformImage;
+    GDT.Platform = {
+      platforms: Platforms.allPlatforms,
+      getAll: function() {
+        return GDT.Platform.platforms.slice();
+      },
+      getAvailable: function(company) {
+        return GDT.Company.getPlatformsFor(company).filter(function(p) {
+          return Platforms.getRetireDate(p) > Math.floor(company.currentWeek) && !p.isCustom || p.isCustom === true && (company.currentWeek > General.getWeekFromDateString(p.published) && !p.soldOut);
+        });
+      },
+      getImage: function(platform, week) {
+        var date, i, image, k, len, ref;
+        if (platform.id === 'PC') {
+          return oldPlatformImage(platform, week);
+        }
+        if (!platform.imageDates) {
+          return platform.iconUri;
+        } else if (week) {
+          ref = platform.imageDates;
+          for (i = k = 0, len = ref.length; k < len; i = ++k) {
+            date = ref[i];
+            if (General.getWeekFromDateString(date) <= week && i !== 0) {
+              image = "{0}/{1}-{2}.png".format(baseUri, platform.id, String(i + 1));
+            }
+          }
+          if (!image) {
+            return "{0}/{1}.png".format(baseUri, platform.id);
+          } else {
+            return image;
+          }
+        }
+      },
+      getById: function(id) {
+        return GDT.Platform.getAll().first(function(p) {
+          return p.id === id;
+        });
+      }
+    };
+    Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable;
+    return Platforms.getPlatformImage = GDT.Platform.getImage;
+  })();
   GDT.Topic = {
     topics: Topics.topics,
     _topicBackup: JSON.parse(JSON.stringify(GDT.Topic.topics)),
@@ -2621,7 +2741,7 @@ SDP.GDT = (function() {
         return results;
       },
       reviewLatestFor: function(company) {
-        var achievedRatio, badDecisions, baseScore, bugModifier, bugsPercentage, demote, diff, difference, dp, executedDevMissions, finalScore, game, gameAudienceWeighting, generalModifier, genreText, goldenRatio, goodDecisions, highestWeighting, highestWeightingIndex, i, i1, j1, k, key, l, len, len1, len2, len3, len4, len5, m, maxScoreFactor, maxTech, minTech, mission, mmoFactor, negativeMessages, newStaff, nonOptimalMissions, numberWorkedOnGame, optimalMissionFocus, optimalSize, p, penalty, perc, percentDifference, platformGenreMatch, positiveMessages, previousGame, ref, ref1, ref2, ref3, ref4, retVal, sameGenreTopic, sequelTo, smallestWeighting, smallestWeightingIndex, techLevelModifier, tempGame, tempWeighting, topScore, topScoreDecrease, topicGenreMatch, tp, trendModifier, u, underdevelopedMissions, value, weighting, x, z;
+        var achievedRatio, badDecisions, baseScore, bugModifier, bugsPercentage, demote, diff, difference, dp, executedDevMissions, finalScore, game, gameAudienceWeighting, generalModifier, genreText, goldenRatio, goodDecisions, highestWeighting, highestWeightingIndex, i, i1, k, key, l, len, len1, len2, len3, len4, len5, m, maxScoreFactor, maxTech, minTech, mission, mmoFactor, negativeMessages, newStaff, nonOptimalMissions, numberWorkedOnGame, optimalMissionFocus, optimalSize, p, penalty, perc, percentDifference, platformGenreMatch, positiveMessages, previousGame, q, ref, ref1, ref2, ref3, ref4, retVal, sameGenreTopic, sequelTo, smallestWeighting, smallestWeightingIndex, techLevelModifier, tempGame, tempWeighting, topScore, topScoreDecrease, topicGenreMatch, tp, trendModifier, u, underdevelopedMissions, value, weighting, x, z;
         negativeMessages = [];
         positiveMessages = [];
         mmoFactor = 1;
@@ -2748,7 +2868,7 @@ SDP.GDT = (function() {
           highestWeighting = Platforms.getNormGenreWeighting(game.platforms[0].genreWeightings, game.genre, game.secondGenre);
           highestWeightingIndex = 0;
           ref1 = game.platforms;
-          for (i = u = 0, len2 = ref1.length; u < len2; i = ++u) {
+          for (i = q = 0, len2 = ref1.length; q < len2; i = ++q) {
             p = ref1[i];
             tempWeighting = Platforms.getNormGenreWeighting(p.genreWeightings, game.genre, game.secondGenre);
             if (tempWeighting > highestWeighting) {
@@ -2802,8 +2922,8 @@ SDP.GDT = (function() {
           }
           minTech = maxTech;
           ref2 = game.platforms;
-          for (x = 0, len3 = ref2.length; x < len3; x++) {
-            p = ref2[x];
+          for (u = 0, len3 = ref2.length; u < len3; u++) {
+            p = ref2[u];
             if (!(p.id !== "PC")) {
               continue;
             }
@@ -2827,8 +2947,8 @@ SDP.GDT = (function() {
         }
         if (achievedRatio > 0.7) {
           ref3 = game.platforms;
-          for (z = 0, len4 = ref3.length; z < len4; z++) {
-            p = ref3[z];
+          for (x = 0, len4 = ref3.length; x < len4; x++) {
+            p = ref3[x];
             if (Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience) <= 0.8) {
               value *= Platforms.getPlatformsAudienceWeighting(p.audienceWeightings, game.targetAudience, true);
               achievedRatio = value / topScore;
@@ -2886,8 +3006,8 @@ SDP.GDT = (function() {
               }
               minTech = maxTech;
               ref4 = game.platforms;
-              for (i1 = 0, len5 = ref4.length; i1 < len5; i1++) {
-                p = ref4[i1];
+              for (z = 0, len5 = ref4.length; z < len5; z++) {
+                p = ref4[z];
                 if (!(p.id !== "PC")) {
                   continue;
                 }
@@ -2904,7 +3024,7 @@ SDP.GDT = (function() {
             }
             if (company.gameLog.length > 3) {
               topScoreDecrease = true;
-              for (i = j1 = 1; j1 <= 3; i = ++j1) {
+              for (i = i1 = 1; i1 <= 3; i = ++i1) {
                 tempGame = company.gameLog[company.gameLog.length - i];
                 if (tempGame.score > 5.2 - 0.2 * tempGame.platforms.length && !tempGame.flags.scoreWithoutBrackets) {
                   topScoreDecrease = false;
@@ -3151,1050 +3271,74 @@ SDP.GDT = (function() {
 
 /*
 Adds company tracking system
- */
 
-Companies.createCompany = function(item) {
-  var p;
-  if (item.constructor === String) {
-    item = {
-      name: item
-    };
-  }
-  if ((item.id == null) && (item.name != null)) {
-    item.id = name.replace(/\s/g, "");
-  }
-  item.platforms = [];
-  for (p in Platforms.allPlatforms) {
-    if (p.company === item.name) {
-      item.platforms.push(p);
-    }
-  }
-  item.sort = function() {
-    return item.platforms.sort(function(a, b) {
-      return General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published);
-    });
-  };
-  item.addPlatform = function(platform) {
-    if (item.platforms.find(function(val) {
-      return platform.id === val.id;
-    }) != null) {
-      return;
-    }
-    platform.company = item.name;
-    SDP.GDT.addPlatform(platform);
-    item.platforms.push(platform);
-    item.sort();
-    return platform;
-  };
-  item.sort();
-  return item;
-};
-
-Companies.createVanillaCompany = function(item) {
-  Companies.createCompany(item);
-  item.isVanilla = true;
-  return item;
-};
-
-Companies.vanillaCompanies = [Companies.createVanillaCompany("Micronoft"), Companies.createVanillaCompany("Grapple"), Companies.createVanillaCompany("Govodore"), Companies.createVanillaCompany("Ninvento"), Companies.createVanillaCompany("Vena"), Companies.createVanillaCompany("Vonny"), Companies.createVanillaCompany("KickIT")];
-
-Companies.moddedCompanies = [];
-
-Companies.getAllCompanies = function() {
-  var c, comp;
-  c = Companies.vanillaCompanies.filter(function(val) {
-    return val.id != null;
-  });
-  c.addRange(Companies.moddedCompanies.filter(function(val) {
-    return val.id != null;
-  }));
-  for (comp in c) {
-    comp.sort = function() {
-      return comp.platforms.sort(function(a, b) {
-        return General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published);
-      });
-    };
-    comp.sort();
-  }
-  c.sort(function(a, b) {
-    return General.getWeekFromDateString(a.platforms[0].published) - General.getWeekFromDateString(b.platforms[0].published);
-  });
-  return c;
-};
-
-Companies.getAvailableCompanies = function(company) {
-  var week;
-  week = Math.floor(company.currentWeek);
-  return Companies.getAllCompanies().filter(function(val) {
-    return General.getWeekFromDateString(val.platforms[0].published) <= week;
-  });
-};
-
-
-/*
-UTIL
- */
-
-SDP.Util = {};
-
-SDP.Util.getRandomInt = function(random, max) {
-  if (typeof (random != null ? random.random : void 0) === 'function') {
-    return Math.max(max - 1, Math.floor(random.random() * max));
-  }
-};
-
-SDP.Util.generateNewSeed = function(settings) {
-  settings.seed = Math.floor(Math.random() * 65535);
-  settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3;
-  return settings.contractsDone = [];
-};
-
-SDP.Util.getSeed = function(settings) {
-  if (!settings.seed) {
-    SDP.Util.generateNewSeed(settings);
-    settings.intialSettings = true;
-  } else if (settings.expireBy <= GameManager.gameTime) {
-    SDP.Util.generateNewSeed(settings);
-    settings.intialSettings = false;
-  }
-  return settings.seed;
-};
-
-
-/*
-LOG
- */
-
-
-/*
-Implements the log functionality of UltimateLib, allows easy conversion from UltimateLib
- */
-
-SDP.Logger = (function(s) {
-  var toTimeStr;
-  toTimeStr = function(date) {
-    var forceZero;
-    forceZero = function(n) {
-      if (n >= 0 && n < 10) {
-        return "0" + e;
-      } else {
-        return e + "";
-      }
-    };
-    return [[forceZero(date.getFullYear()), forceZero(date.getMonth() + 1), date.getDate()].join("-"), [forceZero(date.getHours()), forceZero(date.getMinutes()), forceZero(date.getSeconds())].join(":")].join(" ");
-  };
-  s.enabled = false;
-  s.log = function(e, c) {
-    var str, timestamp;
-    if (!s.enabled) {
-      return;
-    }
-    timestamp = toTimeStr(new Date());
-    str = "";
-    str = c != null ? timestamp + " : Error! " + e + "\n " + c.message : timestamp + " : " + e;
-    return console.log(str);
-  };
-  return s;
-})(SDP.Logger || {});
-
-
-/*
-STORAGE
- */
-
-
-/*
-Implements the jStorage functionality of UltimateLib, allows easy conversion from UltimateLib
- */
-
-SDP.Storage = (function(s) {
-  var log;
-  log = SDP.Logger.log;
-  s.read = function(storeName, defaultVal) {
-    var e;
-    try {
-      log("SDP.Storage.read Started from localStorage with ID SPD.Storage." + f);
-      if (s.getStorageFreeSize()) {
-        if (defaultVal != null) {
-          return $.jStorage.get("SDP.Storage." + storeName, defaultVal);
-        } else {
-          return $.jStorage.get("SDP.Storage." + storeName);
-        }
-      }
-    } catch (error1) {
-      e = error1;
-      log("SDP.Storage.read Local storage error occured. Error: " + e.message);
-      return false;
-    }
-  };
-  s.write = function(storeName, val, options) {
-    var e;
-    if (!s.getStorageFreeSize()) {
-      return;
-    }
-    try {
-      if (options != null) {
-        $.jStorage.set("SDP.Storage." + storeName, val, {
-          TTL: options
-        });
-      } else {
-        $.jStorage.set("SDP.Storage." + storeName);
-      }
-      return log("SDP.Storage.write Local storage successful at ID SDP.Storage." + f);
-    } catch (error1) {
-      e = error1;
-      log("SDP.Storage.write Local storage error occured! Error: " + e.message);
-      return false;
-    }
-  };
-  s.clearCache = function() {
-    return $.jStorage.flush();
-  };
-  s.getAllKeys = function() {
-    return $.jStorage.index();
-  };
-  s.getStorageSize = function() {
-    return $.jStorage.storageSize();
-  };
-  s.getStorageFreeSize = function() {
-    return $.jStorage.storageAvailable();
-  };
-  s.reload = function() {
-    return $.jStorage.reInit();
-  };
-  s.onKeyChange = function(front, back, func) {
-    return $.jStorage.listenKeyChange("SDP.Storage." + front + "." + back, func);
-  };
-  s.removeListeners = function(front, back, func) {
-    if (func != null) {
-      return $.jStorage.stopListening("SDP.Storage." + front + "." + back, func);
-    } else {
-      return $.jStorage.stopListening("SDP.Storage." + front + "." + back);
-    }
-  };
-  return s;
-})(SDP.Storage || {});
-
-
-/*
-GRAPHICAL
- */
-
-
-/*
-Implements many common graphical functionalities of UltimateLib, allows easy conversion from UltimateLib
- */
-
-SDP.Graphical = (function(s) {
-  var div, div2, panelChildren, sdpElement;
-  s.Elements = (function(e) {
-    e.Head = $("head");
-    e.Body = $("body");
-    e.SettingsPanel = $("#settingsPanel");
-    e.GameContainerWrapper = $("#gameContainerWrapper");
-    e.SimpleModalContainer = $("#simplemodal-container");
-    return e;
-  })(s.Elements || {});
-  s.Visuals = (function(v) {
-    v.Custom = (function(c) {
-      var vis;
-      vis = "SDP-Visuals-Custom";
-      c.setCss = function(id, content) {
-        id = vis + id;
-        if ($("#" + id).length === 0) {
-          $("head").append("<style id='" + e + "' type='text/css'></style>");
-        }
-        return $("head").find("#" + id).append(content);
-      };
-      c.addCss = function(id, content) {
-        id = vis + id;
-        if ($("#" + id).length === 0) {
-          $("head").append("<style id='" + e + "' type='text/css'></style>");
-        }
-        return $("head").find("#" + id).html(content);
-      };
-      return c;
-    })(v.Custom || {});
-    return v;
-  })(s.Visuals || {});
-  panelChildren = s.Elements.SettingsPanel.children();
-  div = $(document.createElement("div"));
-  div.attr("id", "SDPConfigurationTabs");
-  div.css({
-    width: "100%",
-    height: "auto"
-  });
-  sdpElement = $(document.createElement("sdp"));
-  sdpElement.attr("id", "SDPConfigurationTabsList");
-  sdpElement.append('<li><a href="#SDPConfigurationDefaultTabPanel">Game</a></li>');
-  div2 = $(document.createElement("div"));
-  div2.attr("id", "SDPConfigurationDefaultTabPanel");
-  sdpElement.appendTo(div);
-  div2.appendTo(div);
-  panelChildren.appendTo(div.find("#SDPConfigurationDefaultTabPanel").first());
-  div.appendTo(SDP.Graphical.Elements.SettingsPanel);
-  div.tabs();
-  div.find(".ui-tabs .ui-tabs-nav li a").css({
-    fontSize: "7pt"
-  });
-  SDP.Graphical.Visuals.Custom.setCss("advanceOptionsCss", "#newGameView .featureSelectionPanel { overflow-x: none overflow-y: auto }</style>");
-  SDP.Graphical.Visuals.Custom.setCss("settingPanelCss", ".ui-dialog .ui-dialog-content { padding: .5em 1em 1em .5em overflow-x: none overflow-y: visible }");
-  a.setLayoutCss = function(modName) {
-    var b;
-    b = $('link[href$="layout.css"]');
-    return b.attr("href", ".mods/" + modName + "/css/layout.css");
-  };
-  s.addTab = function(tabId, category, content) {
-    var configTabs;
-    div = $(document.createElement("div"));
-    div.attr({
-      id: tabId
-    });
-    div.css({
-      width: "100%",
-      height: "auto",
-      display: "block"
-    });
-    div2 = $(document.createElement("div"));
-    div2.attr("id", tabId + "Container");
-    div.append(div2);
-    div2.append(content);
-    configTabs = $("SDPConfigurationTabs");
-    configTabs.tabs("add", "#" + tabId, category);
-    configTabs.tabs("refresh");
-    configTabs.tabs("select", 0);
-    $("#" + tabId).append(b);
-    return div;
-  };
-  s.addAdvancedOption = function(content) {
-    var selection;
-    selection = $("#newGameView").find(".featureSelectionPanel.featureSelectionPanelHiddenState");
-    return selection.append(content);
-  };
-  return s;
-})(SDP.Graphical || {});
-
-
-/*
-PATCHES
- */
-
-
-/*
-Functions which require patches
- */
-
-SDP.GDT.addTraining = function(item) {
-  if ((SDP.GDT.Training != null) && item instanceof SDP.GDT.Training) {
-    item = item.toInput();
-  }
-  if (item.pointsCost == null) {
-    item.pointsCost = 0;
-  }
-  if (Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'duration', 'category', 'categoryDisplayName']) && Checks.checkUniqueness(item, 'id', Training.getAllTraining())) {
-    Training.moddedTraining(item);
-  }
-};
-
-SDP.GDT.addPublisher = function(item) {
-  if ((SDP.GDT.Publisher != null) && item instanceof SDP.GDT.Publisher) {
-    item = item.toInput();
-  }
-  if (!Checks.checkUniqueness(item, 'id', Companies.getAllCompanies())) {
-    return;
-  }
-  if (Checks.checkPropertiesPresent(item, ['id', 'name']) && Checks.checkUniqueness(item, 'id', ProjectContracts.getAllPublishers())) {
-    ProjectContracts.moddedPublishers.push(item);
-  }
-};
-
-SDP.GDT.addContract = function(item) {
-  if ((SDP.GDT.Contract != null) && item instanceof SDP.GDT.Contract) {
-    item = item.toInput();
-  }
-  if (Checks.checkPropertiesPresent(item, ['name', 'description', 'dF', 'tF'])) {
-    ProjectContracts.moddedContracts.push(item);
-  }
-};
-
-SDP.GDT.addReviewer = function(item) {
-  if (item.constructor === String) {
-    item = {
-      id: item.replace(/\s/g, ""),
-      name: item
-    };
-  }
-  if ((SDP.GDT.Reviewer != null) && item instanceof SDP.GDT.Reviewer) {
-    item = item.toInput();
-  }
-  if (Checks.checkPropertiesPresent(item, ['id', 'name']) && Checks.checkUniqueness(item, 'id', Reviews.getAllReviewers())) {
-    Reviews.moddedReviewers.push(item);
-  }
-};
-
-SDP.GDT.addReviewMessage = function(item) {
-  if (item.constructor === String) {
-    item = {
-      message: item,
-      isRandom: true
-    };
-  }
-  if (item.message || item.getMessage) {
-    Reviews.moddedMessages.push(item);
-  }
-};
-
-SDP.GDT.addApplicantFunctor = function(item) {
-  if (Checks.checkPropertiesPresent(item, ['apply', 'forMale']) && typeof apply === "function") {
-    JobApplicants.moddedAlgorithims.push(item);
-  }
-};
-
-SDP.GDT.addFamousFunctor = function(item) {
-  if (Checks.checkPropertiesPresent(item, ['apply', 'forMale']) && typeof apply === "function") {
-    JobApplicants.moddedFamous.push(item);
-  }
-};
-
-
-/*
- *
- * Patches: improves game modularbility and performance and kills bugs
- * Should force patches on mod load
- *
- */
-
-SDP.GDT.Internal = {};
-
-SDP.GDT.Internal.notificationsToTrigger = [];
-
-
-/*
-Triggers all notifications in the situation they couldn't be triggered before (ie: before the GameManager.company.notification existed
+Companies.createCompany = (item) ->
+	if item.constructor is String then item = {name: item}
+	if not item.id? and item.name? then item.id = name.replace(/\s/g,"")
+	item.platforms = []
+	item.platforms.push(p) for p of Platforms.allPlatforms when p.company is item.name
+	item.sort = ->
+		item.platforms.sort (a,b) ->
+			General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published)
+	item.addPlatform = (platform) ->
+		return if item.platforms.find((val) -> platform.id is val.id)?
+		platform.company = item.name
+		SDP.GDT.addPlatform(platform)
+		item.platforms.push(platform)
+		item.sort()
+		platform
+	item.sort()
+	item
+Companies.createVanillaCompany = (item) ->
+	Companies.createCompany(item)
+	item.isVanilla = true
+	item
+Companies.vanillaCompanies = [
+	Companies.createVanillaCompany("Micronoft")
+	Companies.createVanillaCompany("Grapple")
+	Companies.createVanillaCompany("Govodore")
+	Companies.createVanillaCompany("Ninvento")
+	Companies.createVanillaCompany("Vena")
+	Companies.createVanillaCompany("Vonny")
+	Companies.createVanillaCompany("KickIT")
+]
+Companies.moddedCompanies = []
+Companies.getAllCompanies = ->
+	c = Companies.vanillaCompanies.filter (val) -> val.id?
+	c.addRange(Companies.moddedCompanies.filter (val) -> val.id?)
+	for comp of c
+		comp.sort = ->
+			comp.platforms.sort (a,b) ->
+				General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published)
+		comp.sort()
+	c.sort (a,b) ->
+		General.getWeekFromDateString(a.platforms[0].published) - General.getWeekFromDateString(b.platforms[0].published)
+	c
+Companies.getAvailableCompanies = (company) ->
+	week = Math.floor(company.currentWeek)
+	Companies.getAllCompanies().filter (val) ->
+		General.getWeekFromDateString(val.platforms[0].published) <= week
  */
 
 GDT.on(GDT.eventKeys.saves.loaded, function() {
   var i, k, len, ref;
-  ref = SDP.GDT.Internal.notificationsToTrigger;
+  ref = SDP.GDT.Notification.queue;
   for (k = 0, len = ref.length; k < len; k++) {
     i = ref[k];
     GameManager.company.notifications.push(i);
   }
-  return SDP.GDT.Internal.notificationsToTrigger = [];
+  return SDP.GDT.Notification.queue = [];
 });
 
 GDT.on(GDT.eventKeys.saves.newGame, function() {
   var i, k, len, ref;
-  ref = SDP.GDT.Internal.notificationsToTrigger;
+  ref = SDP.GDT.Notification.queue;
   for (k = 0, len = ref.length; k < len; k++) {
     i = ref[k];
     GameManager.company.notifications.push(i);
   }
-  return SDP.GDT.Internal.notificationsToTrigger = [];
+  return SDP.GDT.Notification.queue = [];
 });
-
-
-/*
-Allows new platforms to incorporate different images based on the date
- */
-
-Platforms._oldGetPlatformImage = Platforms.getPlatformImage;
-
-Platforms.getPlatformImage = function(platform, week) {
-  var baseUri, date, i, image, k, len, ref;
-  if (platform.id === 'PC') {
-    return Platforms._oldGetPlatformImage(platform, week);
-  }
-  if ((platform.imageDates == null) || (platform.baseIconUri == null)) {
-    return platform.iconUri;
-  }
-  baseUri = platform.baseIconUri;
-  image = null;
-  if (week && platform.imageDates.constructor === Array) {
-    ref = platform.imageDates;
-    for (i = k = 0, len = ref.length; k < len; i = ++k) {
-      date = ref[i];
-      if (General.getWeekFromDateString(date) <= week && i !== 0) {
-        image = "{0}/{1}-{2}.png".format(baseUri, platform.id, String(i + 1));
-      }
-    }
-  }
-  if (image == null) {
-    image = "{0}/{1}.png".format(baseUri, platform.id);
-  }
-  return image;
-};
-
-
-/*
-Forces getAllTraining to include modded training
- */
-
-Training._oldGetAllTraining = Training.getAllTraining;
-
-Training.moddedTraining = [];
-
-Training.getAllTraining = function() {
-  var k, len, modT, ref, trainings;
-  trainings = Training._oldGetAllTraining();
-  ref = Training.moddedTraining;
-  for (k = 0, len = ref.length; k < len; k++) {
-    modT = ref[k];
-    if ((modT.id != null) && modT.isTraining) {
-      trainings.push(modT);
-    }
-  }
-};
-
-
-/*
-Adds features to the publisher contracts which determine how they act
-Also allows low chance for platform company to randomly give a publisher contract
- */
-
-ProjectContracts.createPublisher = function(item, id) {
-  if (item.constructor === String) {
-    item = {
-      name: item
-    };
-  }
-  if (id != null) {
-    item.id = id;
-  }
-  if ((item.id == null) && (item.name != null)) {
-    item.id = name.replace(/\s/g, "");
-  }
-  return item;
-};
-
-ProjectContracts.vanillaPublishers = [ProjectContracts.createPublisher("Active Visionaries"), ProjectContracts.createPublisher("Electronic Mass Productions", "ea"), ProjectContracts.createPublisher("Rockville Softworks"), ProjectContracts.createPublisher("Blue Bit Games"), ProjectContracts.createPublisher("CapeCom"), ProjectContracts.createPublisher("Codemeisters"), ProjectContracts.createPublisher("Deep Platinum"), ProjectContracts.createPublisher("Infro Games"), ProjectContracts.createPublisher("LoWood Productions"), ProjectContracts.createPublisher("TGQ"), ProjectContracts.createPublisher("\u00dcberSoft")];
-
-ProjectContracts.moddedPublishers = [];
-
-ProjectContracts.publisherContracts.__oldGetContract = ProjectContracts.publisherContracts.getContract;
-
-ProjectContracts.getAllPublishers = function() {
-  var results;
-  results = ProjectContracts.vanillaPublishers.filter(function(val) {
-    return val.id != null;
-  });
-  results.push(ProjectContracts.moddedPublishers.filter(function(val) {
-    return val.id != null;
-  }));
-  return results;
-};
-
-ProjectContracts.getAvailablePublishers = function(company) {
-  var week;
-  week = Math.floor(company.currentWeek);
-  return ProjectContracts.getAllPublishers().filter(function(val) {
-    return ((val.startWeek == null) || week > General.getWeekFromDateString(val.startWeek, val.ignoreGameLengthModifier)) && ((val.retireWeek == null) || val.retireWeek === '260/12/4' || week < General.getWeekFromDateString(val.retireWeek, val.ignoreGameLengthModifier));
-  });
-};
-
-ProjectContracts.getPublishingCompanies = function(company) {
-  var c;
-  c = Companies.getAllCompanies(company).filter(function(val) {
-    return (val.notPublisher != null) && !val.notPublisher;
-  });
-  c.forEach(function(val) {
-    return val.isCompany = true;
-  });
-  return c;
-};
-
-SDP.GDT.Internal.getGenericContractsSettings = function(company, type) {
-  var key, settings;
-  key = "contracts" + type;
-  settings = company.flags[key];
-  if (!settings) {
-    settings = {
-      id: key
-    };
-    company.flags[key] = settings;
-  }
-  return settings;
-};
-
-SDP.GDT.Internal.generatePublisherContracts = function(company, settings, maxNumber) {
-  var allPlatforms, audience, audiences, basePay, contracts, count, diffculty, excludes, genre, i, k, lastGame, minScore, name, pay, penalty, platform, platforms, pubName, publisher, publishers, random, ref, researchedTopics, royaltyRate, seed, size, sizeBasePay, sizes, topic, topics;
-  contracts = [];
-  seed = settings.seed;
-  random = new MersenneTwister(SDP.Util.getSeed(settings));
-  if (settings.seed !== seed) {
-    settings.topic = void 0;
-    settings.researchedTopics = void 0;
-    settings.excludes = void 0;
-    settings.platforms = void 0;
-  }
-  if (!settings.topics || !settings.researchedTopics || !settings.platforms) {
-    topics = company.topics.slice();
-    topics.addRange(General.getTopicsAvailableForResearch(company));
-    settings.topics = topics.map(function(t) {
-      return t.id;
-    });
-    researchedTopics = company.topics.map(function(t) {
-      return t.id;
-    });
-    settings.researchedTopics = researchedTopics;
-    platforms = Platforms.getPlatformsOnMarket(company).filter(function(p) {
-      return !p.isCustom && Platforms.doesPlatformSupportGameSize(p, "medium");
-    });
-    settings.platforms = platforms.map(function(p) {
-      return p.id;
-    });
-    settings.excludes = [];
-    lastGame = company.gameLog.last();
-    if (lastGame) {
-      settings.excludes.push({
-        genre: lastGame.genre.id,
-        topic: lastGame.topic.id
-      });
-    }
-  } else {
-    topics = settings.topics.map(function(id) {
-      return Topics.topics.first(function(t) {
-        return t.id === id;
-      });
-    });
-    researchedTopics = settings.researchedTopics.map(function(id) {
-      return Topics.topics.first(function(t) {
-        return t.id === id;
-      });
-    });
-    allPlatforms = Platforms.getPlatforms(company, true);
-    platforms = settings.platforms.map(function(id) {
-      return allPlatforms.first(function(p) {
-        return p.id === id;
-      });
-    });
-  }
-  excludes = settings.excludes.slice();
-  count = SDP.Util.getRandomInt(random, maxNumber);
-  if (settings.intialSettings) {
-    count = Math.max(1, count);
-  }
-  sizes = ["medium"];
-  if (company.canDevelopLargeGames()) {
-    sizes.push("large", "large", "large");
-  }
-  audiences = SDP.Enum.Audience.toArray();
-  publishers = ProjectContracts.getAvailablePublishers(company);
-  publishers.push(ProjectContracts.getPublishingCompanies(company));
-  sizeBasePay = {
-    medium: 15e4,
-    large: 15e5 / 2
-  };
-  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
-    if (platform && (platform.company && random.random() <= 0.2)) {
-      publisher = publishers.find(function(val) {
-        return val.toString() === platform.company;
-      });
-    } else if (random.random() <= 0.1) {
-      publisher = publishers.pickRandom(random);
-    } else {
-      publisher = publishers.filter(function(val) {
-        return !(typeof val.isCompany === "function" ? val.isCompany() : void 0);
-      }).pickRandom(random);
-    }
-    diffculty = 0;
-    genre = void 0;
-    topic = void 0;
-    if (random.random() <= 0.7) {
-      genre = publisher.getGenre != null ? publisher.getGenre(random) : General.getAvailableGenres(company).pickRandom(random);
-      diffculty += 0.1;
-    }
-    if (random.random() <= 0.7) {
-      while (true) {
-        if (random.random() <= 0.7) {
-          topic = publisher.getTopic != null ? publisher.getTopic(random, topics.except(researchedTopics)) : topics.except(researchedTopics).pickRandom(random);
-        } else {
-          topic = publisher.getTopic != null ? publisher.getTopic(random, topics) : topics.pickRandom(random);
-        }
-        if (topic != null) {
-          break;
-        }
-        if (!excludes.some(function(e) {
-          return ((genre == null) || e.genre === genre.id) && e.topic === topic.id;
-        })) {
-          break;
-        }
-      }
-      if (topic != null) {
-        difficulty += 0.1;
-      }
-    }
-    if (genre || topic) {
-      excludes.push({
-        genre: genre != null ? genre.id : void 0,
-        topic: topic != null ? topic.id : void 0
-      });
-    }
-    platform = void 0;
-    if (random.random() <= 0.7) {
-      platform = publisher.getPlatform != null ? publisher.getPlatform(random, platforms) : platform = platforms.pickRandom(random);
-    }
-    audience = void 0;
-    if (company.canSetTargetAudience() && random.random() <= 0.2) {
-      audience = publisher.getAudience != null ? publisher.getAudience(random) : audience = audiences.pickRandom(random);
-    }
-    diffculty += 0.8 * random.random();
-    minScore = 4 + Math.floor(5 * diffculty);
-    while (true) {
-      size = sizes.pickRandom(random);
-      if (!((platform != null) && !Platforms.doesPlatformSupportGameSize(platform, size))) {
-        break;
-      }
-    }
-    basePay = sizeBasePay[size];
-    pay = basePay * (minScore / 10);
-    pay /= 5e3;
-    pay = Math.max(1, Math.floor(pay)) * 5e3;
-    penalty = pay * 1.2 + pay * 1.8 * random.random();
-    penalty /= 5e3;
-    penalty = Math.floor(penalty) * 5e3;
-    royaltyRate = Math.floor(7 + 8 * difficulty) / 100;
-    name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
-    if (!platform || Platforms.getPlatformsOnMarket(company).first(function(p) {
-      return p.id === platform.id;
-    })) {
-      pubName = publisher.getName != null ? publisher.getName() : publisher.toString();
-      contracts.push({
-        id: "publisherContracts",
-        refNumber: Math.floor(Math.random() * 65535),
-        type: "gameContract",
-        name: name,
-        description: "Publisher: {0}".localize().format(pubName),
-        publisher: pubName,
-        topic: topic ? topic.id : topic,
-        genre: genre ? genre.id : genre,
-        platform: platform ? platform.id : void 0,
-        gameSize: size,
-        gameAudience: audience,
-        minScore: minScore,
-        payment: pay,
-        penalty: penalty,
-        royaltyRate: royaltyRate
-      });
-    } else {
-      count++;
-    }
-  }
-  return contracts;
-};
-
-ProjectContracts.publisherContracts.getContract = function(company) {
-  return SDP.GDT.Internal.generatePublisherContracts(company, SDP.GDT.Internal.getGenericContractsSettings(company, "publisher"), 5).filter(function(c) {
-    return !c.skip;
-  });
-};
-
-
-/*
-Allows adding of standard contract work
- */
-
-ProjectContracts.moddedContracts = [];
-
-ProjectContracts.getAvailableModContractsOf = function(company, size) {
-  var c, contracts, k, len, ref;
-  contracts = [];
-  ref = ProjectContracts.moddedContracts;
-  for (k = 0, len = ref.length; k < len; k++) {
-    c = ref[k];
-    if ((c.isAvailable == null) || ((c.isAvailable != null) && c.isAvailable(company))) {
-      if (c.size === size) {
-        contracts.push(c);
-      }
-    }
-  }
-  return contracts;
-};
-
-ProjectContracts.genericContracts.__oldGetContract = ProjectContracts.genericContracts.getContract;
-
-ProjectContracts.genericContracts.getContract = function(company) {
-  var contracts, genCon, random, resultContracts, seed, settings;
-  settings = SDP.GDT.Internal.getGenericContractsSettings(company, "small");
-  seed = SDP.Util.getSeed(settings);
-  random = new MersenneTwister(seed);
-  genCon = SDP.GDT.Internal.generateContracts;
-  resultContracts = [];
-  contracts = ProjectContracts.genericContracts.__oldGetContract(company);
-  contracts.addRange(genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4));
-  if (company.flags.mediumContractsEnabled) {
-    settings = SDP.GDT.Internal.getGenericContractsSettings(company, "medium");
-    contracts.addRange(genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3));
-  }
-  if (company.flags.largeContractsEnabled) {
-    settings = SDP.GDT.Internal.getGenericContractsSettings(company, "large");
-    contracts.addRange(genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2));
-  }
-  return contracts.shuffle(random).filter(function(c) {
-    return !c.skip;
-  });
-};
-
-SDP.GDT.Internal.generateContracts = function(company, settings, sourceSet, size, maxNumber) {
-  var contract, contracts, count, i, item, k, random, ref, seed, set;
-  seed = SDP.Util.getSeed(settings);
-  random = new MersenneTwister(seed);
-  contracts = [];
-  set = sourceSet.slice();
-  count = SDP.Util.getRandomInt(random, maxNumber);
-  if (settings.intialSettings) {
-    count = Math.max(1, count);
-  }
-  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
-    if (!(set.length > 0)) {
-      continue;
-    }
-    item = set.pickRandom(random);
-    set.remove(item);
-    contract = SDP.GDT.Internal.generateSpecificContract(company, item, size, random);
-    contract.id = "genericContracts";
-    contract.index = i;
-    if (settings.contractsDone && settings.contractsDone.indexOf(i) !== -1) {
-      contract.skip = true;
-    }
-    contracts.push(contract);
-  }
-  return contracts;
-};
-
-SDP.GDT.Internal.generateSpecificContract = function(company, template, size, random) {
-  var d, factor, minPoints, pay, penalty, pointPart, points, r, t, weeks;
-  r = random.random();
-  if (random.random() > 0.8) {
-    r += random.random();
-  }
-  minPoints = 11;
-  if (size === "medium") {
-    minPoints = 30;
-  }
-  if (size === "large") {
-    minPoints = 100;
-  }
-  if (minPoints === 12 && company.staff.length > 2) {
-    minPoints += 6;
-  }
-  factor = company.getCurrentDate().year / 25;
-  minPoints += minPoints * factor;
-  points = minPoints + minPoints * r;
-  pointPart = points / (template.dF + template.tF);
-  d = pointPart * template.dF;
-  t = pointPart * template.tF;
-  d += d * 0.2 * random.random() * random.randomSign();
-  t += t * 0.2 * random.random() * random.randomSign();
-  d = Math.floor(d);
-  t = Math.floor(t);
-  pay = points * 1e3;
-  pay /= 1e3;
-  pay = Math.floor(pay) * 1e3;
-  weeks = Math.floor(3 + 7 * random.random());
-  if (size === "small") {
-    weeks = Math.floor(3 + 3 * random.random());
-  }
-  penalty = pay * 0.2 + pay * 0.3 * random.random();
-  penalty /= 1e3;
-  penalty = Math.floor(penalty) * 1e3;
-  return {
-    name: template.name,
-    description: template.description,
-    requiredD: d,
-    requiredT: t,
-    spawnedD: 0,
-    spawnedT: 0,
-    payment: pay,
-    penalty: -penalty,
-    weeksToFinish: weeks,
-    rF: template.rF,
-    isGeneric: true,
-    size: size
-  };
-};
-
-
-/*
-Allows adding reviewer names to the reviewer list along with existing and retire dates
-Allows adding review messages
- */
-
-Reviews.moddedReviewers = [];
-
-Reviews.moddedMessages = [];
-
-Reviews.vanillaReviewers = [
-  {
-    id: 'StarGames',
-    name: 'Star Games'
-  }, {
-    id: 'InformedGamer',
-    name: 'Informed Game'
-  }, {
-    id: 'GameHero',
-    name: 'Game Hero'
-  }, {
-    id: 'AllGames',
-    name: 'All Games'
-  }
-];
-
-Reviews.getAllReviewers = function() {
-  var result;
-  result = Reviews.vanillaReviewers.slice();
-  result.addRange(Reviews.moddedReviewers.slice());
-  return result;
-};
-
-Reviews.getAvailableReviewers = function(company) {
-  var week;
-  week = Math.floor(company.currentWeek);
-  return Reviews.getAllReviewers().filter(function(val) {
-    return ((val.startWeek == null) || week > General.getWeekFromDateString(val.startWeek, val.ignoreGameLengthModifier)) && ((val.retireWeek == null) || week < General.getWeekFromDateString(val.retireWeek, val.ignoreGameLengthModifier));
-  });
-};
-
-Reviews.getFourRandomReviewers = function(company) {
-  var first, forth, random, reviews, second, third;
-  reviews = Reviews.getAvailableReviewers(company);
-  if (reviews.length < 4) {
-    throw "Reviewers are missing";
-  }
-  if (reviews.length === 4) {
-    return [reviews[0], reviews[1], reviews[2], reviews[3]];
-  }
-  random = company._mersenneTwister;
-  first = reviews.pickRandom(random);
-  reviews = reviews.except(first);
-  second = reviews.pickRandom(random);
-  reviews = reviews.except(second);
-  third = reviews.pickRandom(random);
-  reviews = reviews.except(third);
-  forth = reviews.pickRandom(random);
-  company.randomCalled += 4;
-  return [first, second, third, forth];
-};
-
-Reviews.getModdedPositiveMessages = function(game, score) {
-  var k, len, m, ref, result;
-  result = [];
-  ref = Reviews.moddedMessages;
-  for (k = 0, len = ref.length; k < len; k++) {
-    m = ref[k];
-    if (m.isPositive && !m.isNegative) {
-      if (m.getMessage != null) {
-        result.push(m.getMessage(game, score));
-      } else if (m.message != null) {
-        result.push(m.message);
-      }
-    }
-  }
-  return result;
-};
-
-Reviews.getModdedNegativeMessages = function(game, score) {
-  var k, len, m, ref, result;
-  result = [];
-  ref = Reviews.moddedMessages;
-  for (k = 0, len = ref.length; k < len; k++) {
-    m = ref[k];
-    if (m.isNegative && !m.isPositive) {
-      if (m.getMessage != null) {
-        result.push(m.getMessage(game, score));
-      } else if (m.message != null) {
-        result.push(m.message);
-      }
-    }
-  }
-  return result;
-};
-
-Reviews.getModdedGenericMessages = function(game, score) {
-  var k, len, m, ref, result;
-  result = [];
-  ref = Reviews.moddedMessages;
-  for (k = 0, len = ref.length; k < len; k++) {
-    m = ref[k];
-    if (!m.isNegative && !m.isPositive) {
-      if (m.getMessage != null) {
-        result.push(m.getMessage(game, score));
-      } else if (m.message != null) {
-        result.push(m.message);
-      }
-    }
-  }
-  return result;
-};
-
-Reviews.__oldGetGenericReviewMessage = Reviews.getGenericReviewMessage;
-
-Reviews.getGenericReviewMessage = function(game, score) {
-  if (game.company.getRandom() <= 0.5) {
-    return Reviews.getModdedGenericMessages(game, score);
-  } else {
-    return Reviews.__oldGetGenericReviewMessage(game, score);
-  }
-};
-
-Reviews.getReviews = function(game, finalScore, positiveMessages, negativeMessages) {
-  var i, intScore, k, message, reviewers, reviews, score, scoreVariation, scores, usedMessages, variation;
-  intScore = Math.floor(finalScore).clamp(1, 10);
-  if (finalScore >= 9.5) {
-    intScore = 10;
-  }
-  reviewers = Reviews.getFourRandomReviewers(game.company);
-  reviews = [];
-  usedMessages = [];
-  scores = [];
-  variation = 1;
-  positiveMessages.addRange(Reviews.getModdedPositiveMessages(game));
-  negativeMessages.addRange(Reviews.getModdedNegativeMessages(game));
-  for (i = k = 0; k < 4; i = ++k) {
-    if (intScore === 5 || intScore === 6) {
-      variation = game.company.getRandom() < 0.05 ? 2 : 1;
-    }
-    scoreVariation = Math.randomSign() === 1 ? 0 : variation * Math.randomSign();
-    score = (intScore + scoreVariation).clamp(1, 10);
-    if (score === 10 && (scores.length === 3 && scores.average() === 10)) {
-      if (!game.flags.psEnabled) {
-        if (Math.floor(finalScore) < 10 || game.company.getRandom() < 0.8) {
-          score--;
-        }
-      } else if (Math.floor(finalScore) === 10 && game.company.getRandom() < 0.4) {
-        score++;
-      }
-    }
-    message = void 0;
-    while (true) {
-      if (game.company.getRandom() <= 0.2) {
-        if (scoreVariation >= 0 && (score > 2 && positiveMessages.length !== 0)) {
-          message = positiveMessages.pickRandom();
-        } else {
-          if (scoreVariation < 0 && (score < 6 && negativeMessages.length !== 0)) {
-            message = negativeMessages.pickRandom();
-          }
-        }
-      } else {
-        message = void 0;
-      }
-      if (!message) {
-        message = Reviews.getGenericReviewMessage(game, score);
-      }
-    }
-    if (usedMessages.weakIndexOf(message) === -1) {
-      break;
-    }
-    usedMessages.push(message);
-    scores.push(score);
-    reviews.push({
-      score: score,
-      message: message,
-      reviewerName: reviewers[i].name
-    });
-  }
-  return reviews;
-};
 
 
 /*
@@ -4230,1181 +3374,139 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 
 /*
 Allow adding famous people and adding custom applicant algorithims
+
+JobApplicants.moddedFamous = []
+JobApplicants.moddedAlgorithims = []
+JobApplicants.getRandomMale = (random) ->
+	results = []
+	JobApplicants.moddedAlgorithims.forEach (val) ->
+		results.push(val.apply(random)) if val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getRandomFemale = (random) ->
+	results = []
+	JobApplicants.moddedAlgorithims.forEach (val) ->
+		results.push(val.apply(random)) if not val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getFamousMale = (tech, design, random) ->
+	results = []
+	JobApplicants.moddedFamous.forEach (val) ->
+		results.push(val.apply(random, tech, design)) if val.forMale
+	results.pickRandom(random)
+
+JobApplicants.getFamousFemale = (tech, design, random) ->
+	results = []
+	JobApplicants.moddedFamous.forEach (val) ->
+		results.push(val.apply(random, tech, design)) if not val.forMale
+	results.pickRandom(random)
+
+JobApplicants.searchTests =
+	[
+		{
+			id : "ComplexAlgorithms"
+			name : "Complex Algorithms".localize()
+			minT : 0.6
+		}
+		{
+			id : "GameDemo"
+			name : "Game Demo".localize()
+			minD : 0.3,
+			minT : 0.3
+		}
+		{
+			id : "Showreel"
+			name : "Showreel".localize()
+			minD : 0.6
+		}
+	]
+UI.__olgGenerateJobApplicants = UI._generateJobApplicants
+UI._generateJobApplicants = ->
+	oldApplicants = UI.__olgGenerateJobApplicants()
+	settings = GameManager.uiSettings["findStaffData"]
+	settings = {ratio : 0.1, tests : []} if not settings
+	settings.seed = Math.floor(GameManager.company.getRandom() * 65535) if not settings.seed
+	ratio = settings.ratio
+	test = JobApplicants.searchTests.first (t) -> t.id is settings.tests.first()
+	company = GameManager.company
+	random = new MersenneTwister(settings.seed)
+	newApplicants = []
+	count = Math.floor(2 + 3 * (ratio + 0.2).clamp(0, 1))
+	rerolls = 0
+	maxRerolls = 2
+	maxBonus = if company.currentLevel is 4 then 4 / 5 else 2 / 5
+	takenNames = GameManager.company.staff.map (s) -> s.name
+	for i in [0...count]
+		qBonusFactor = ratio / 3 + (1 - ratio / 3) * random.random()
+		maxBonus += 1 / 5 if random.random() >= 0.95
+		q = 1 / 5 + maxBonus * qBonusFactor
+		level = Math.floor(q * 5).clamp(1,5)
+		maxD = 1
+		minD = 0
+		if test
+			maxD -= test.minT if test.minT
+			if test.minD
+				minD = test.minD
+				maxD -= minD
+		baseValue = 200 * level
+		d = baseValue * minD + baseValue * maxD * random.random()
+		t = baseValue - d
+		rBonusFactor = random.random()
+		r = 1 / 5 + maxBonus * rBonusFactor
+		sBonusFactor = random.random()
+		s = 1 / 5 + maxBonus * sBonusFactor
+		goodRoll = sBonusFactor > 0.5 and (qBonusFactor > 0.5 and rBonusFactor > 0.5)
+		if not goodRoll and (rerolls < maxRerolls and random.random() <= (ratio + 0.1).clamp(0, 0.7))
+			i--
+			rerolls++
+			continue
+		rerolls = 0
+		isFamous = false
+		sex = "male"
+		loop
+			sex = "male"
+			if goodRoll
+				name = JobApplicants.getFamousMale(t, d, random) if (random.random() > 0.15)
+				else
+					name = JobApplicants.getFamousFemale(t, d, random)
+					sex = "female"
+				isFamous = true
+			else
+				name = JobApplicants.getRandomMale(random) if random.random() > 0.25
+				else
+					name = JobApplicants.getRandomFemale(random)
+					sex = "female"
+				isFamous = false
+		break unless takenNames.indexOf(name) != -1
+		takenNames.push(name)
+		salary = Character.BASE_SALARY_PER_LEVEL * level
+		salary += salary * 0.2 * random.random() * random.randomSign()
+		salary = Math.floor(salary/1e3) * 1e3
+		newApplicants.push {
+			name : name,
+			qualityFactor : q,
+			technologyFactor : t / 500,
+			designFactor : d / 500,
+			researchFactor : r,
+			speedFactor : s,
+			salary : salary,
+			isFamous : isFamous,
+			sex : sex
+		}
+	GDT.fire GameManager, GDT.eventKeys.gameplay.staffApplicantsGenerated, {
+		newApplicants : newApplicants
+		settings : settings
+		rng : random
+	}
+	applicants = []
+	for i in [0...count]
+		if random.random() >= 0.5
+			a = newApplicants.pickRandom(random)
+			applicants.push(a)
+			newApplicants.remove(a)
+		else
+			a = oldApplicants.pickRandom(random)
+			applicants.push(a)
+			oldApplicants.remove(a)
+	return applicants
  */
-
-JobApplicants.moddedFamous = [];
-
-JobApplicants.moddedAlgorithims = [];
-
-JobApplicants.getRandomMale = function(random) {
-  var results;
-  results = [];
-  JobApplicants.moddedAlgorithims.forEach(function(val) {
-    if (val.forMale) {
-      return results.push(val.apply(random));
-    }
-  });
-  return results.pickRandom(random);
-};
-
-JobApplicants.getRandomFemale = function(random) {
-  var results;
-  results = [];
-  JobApplicants.moddedAlgorithims.forEach(function(val) {
-    if (!val.forMale) {
-      return results.push(val.apply(random));
-    }
-  });
-  return results.pickRandom(random);
-};
-
-JobApplicants.getFamousMale = function(tech, design, random) {
-  var results;
-  results = [];
-  JobApplicants.moddedFamous.forEach(function(val) {
-    if (val.forMale) {
-      return results.push(val.apply(random, tech, design));
-    }
-  });
-  return results.pickRandom(random);
-};
-
-JobApplicants.getFamousFemale = function(tech, design, random) {
-  var results;
-  results = [];
-  JobApplicants.moddedFamous.forEach(function(val) {
-    if (!val.forMale) {
-      return results.push(val.apply(random, tech, design));
-    }
-  });
-  return results.pickRandom(random);
-};
-
-JobApplicants.searchTests = [
-  {
-    id: "ComplexAlgorithms",
-    name: "Complex Algorithms".localize(),
-    minT: 0.6
-  }, {
-    id: "GameDemo",
-    name: "Game Demo".localize(),
-    minD: 0.3,
-    minT: 0.3
-  }, {
-    id: "Showreel",
-    name: "Showreel".localize(),
-    minD: 0.6
-  }
-];
-
-UI.__olgGenerateJobApplicants = UI._generateJobApplicants;
-
-UI._generateJobApplicants = function() {
-  var a, applicants, baseValue, company, count, d, goodRoll, i, isFamous, k, l, level, maxBonus, maxD, maxRerolls, minD, name, newApplicants, oldApplicants, q, qBonusFactor, r, rBonusFactor, random, ratio, ref, ref1, rerolls, s, sBonusFactor, salary, settings, sex, t, takenNames, test;
-  oldApplicants = UI.__olgGenerateJobApplicants();
-  settings = GameManager.uiSettings["findStaffData"];
-  if (!settings) {
-    settings = {
-      ratio: 0.1,
-      tests: []
-    };
-  }
-  if (!settings.seed) {
-    settings.seed = Math.floor(GameManager.company.getRandom() * 65535);
-  }
-  ratio = settings.ratio;
-  test = JobApplicants.searchTests.first(function(t) {
-    return t.id === settings.tests.first();
-  });
-  company = GameManager.company;
-  random = new MersenneTwister(settings.seed);
-  newApplicants = [];
-  count = Math.floor(2 + 3 * (ratio + 0.2).clamp(0, 1));
-  rerolls = 0;
-  maxRerolls = 2;
-  maxBonus = company.currentLevel === 4 ? 4 / 5 : 2 / 5;
-  takenNames = GameManager.company.staff.map(function(s) {
-    return s.name;
-  });
-  for (i = k = 0, ref = count; 0 <= ref ? k < ref : k > ref; i = 0 <= ref ? ++k : --k) {
-    qBonusFactor = ratio / 3 + (1 - ratio / 3) * random.random();
-    if (random.random() >= 0.95) {
-      maxBonus += 1 / 5;
-    }
-    q = 1 / 5 + maxBonus * qBonusFactor;
-    level = Math.floor(q * 5).clamp(1, 5);
-    maxD = 1;
-    minD = 0;
-    if (test) {
-      if (test.minT) {
-        maxD -= test.minT;
-      }
-      if (test.minD) {
-        minD = test.minD;
-        maxD -= minD;
-      }
-    }
-    baseValue = 200 * level;
-    d = baseValue * minD + baseValue * maxD * random.random();
-    t = baseValue - d;
-    rBonusFactor = random.random();
-    r = 1 / 5 + maxBonus * rBonusFactor;
-    sBonusFactor = random.random();
-    s = 1 / 5 + maxBonus * sBonusFactor;
-    goodRoll = sBonusFactor > 0.5 && (qBonusFactor > 0.5 && rBonusFactor > 0.5);
-    if (!goodRoll && (rerolls < maxRerolls && random.random() <= (ratio + 0.1).clamp(0, 0.7))) {
-      i--;
-      rerolls++;
-      continue;
-    }
-    rerolls = 0;
-    isFamous = false;
-    sex = "male";
-    while (true) {
-      sex = "male";
-      if (goodRoll) {
-        name = JobApplicants.getFamousMale(t, d, random)(random.random() > 0.15 ? void 0 : (name = JobApplicants.getFamousFemale(t, d, random), sex = "female"));
-        isFamous = true;
-      } else {
-        name = JobApplicants.getRandomMale(random)(random.random() > 0.25 ? void 0 : (name = JobApplicants.getRandomFemale(random), sex = "female"));
-        isFamous = false;
-      }
-    }
-    if (takenNames.indexOf(name) === -1) {
-      break;
-    }
-    takenNames.push(name);
-    salary = Character.BASE_SALARY_PER_LEVEL * level;
-    salary += salary * 0.2 * random.random() * random.randomSign();
-    salary = Math.floor(salary / 1e3) * 1e3;
-    newApplicants.push({
-      name: name,
-      qualityFactor: q,
-      technologyFactor: t / 500,
-      designFactor: d / 500,
-      researchFactor: r,
-      speedFactor: s,
-      salary: salary,
-      isFamous: isFamous,
-      sex: sex
-    });
-  }
-  GDT.fire(GameManager, GDT.eventKeys.gameplay.staffApplicantsGenerated, {
-    newApplicants: newApplicants,
-    settings: settings,
-    rng: random
-  });
-  applicants = [];
-  for (i = l = 0, ref1 = count; 0 <= ref1 ? l < ref1 : l > ref1; i = 0 <= ref1 ? ++l : --l) {
-    if (random.random() >= 0.5) {
-      a = newApplicants.pickRandom(random);
-      applicants.push(a);
-      newApplicants.remove(a);
-    } else {
-      a = oldApplicants.pickRandom(random);
-      applicants.push(a);
-      oldApplicants.remove(a);
-    }
-  }
-  return applicants;
-};
-
-
-/*
-WEIGHT
- */
-
-SDP.GDT.Weight = (function() {
-  var MAX_VAL, MIN_VAL;
-
-  MIN_VAL = 0;
-
-  MAX_VAL = 1;
-
-  function Weight(val1, val2, val3, val4, val5, val6) {
-    var arr;
-    if (val1 == null) {
-      val1 = 0.8;
-    }
-    if (val2 == null) {
-      val2 = val1;
-    }
-    if (val3 == null) {
-      val3 = val2;
-    }
-    if (val5 == null) {
-      val5 = val4;
-    }
-    if (val6 == null) {
-      val6 = val5;
-    }
-    this.toGenre = bind(this.toGenre, this);
-    this.toAudience = bind(this.toAudience, this);
-    this.isAudience = bind(this.isAudience, this);
-    this.isGenre = function() {
-      if (val4 != null) {
-        return true;
-      } else {
-        return false;
-      }
-    };
-    val1 = val1.clamp(MIN_VAL, MAX_VAL);
-    val2 = val2.clamp(MIN_VAL, MAX_VAL);
-    val3 = val3.clamp(MIN_VAL, MAX_VAL);
-    arr = [val1, val2, val3];
-    if (this.isGenre()) {
-      val4 = val4.clamp(MIN_VAL, MAX_VAL);
-      val5 = val5.clamp(MIN_VAL, MAX_VAL);
-      val6 = val6.clamp(MIN_VAL, MAX_VAL);
-      arr.push(val4, val5, val6);
-    }
-    this.get = function() {
-      return arr;
-    };
-  }
-
-  Weight.prototype.isAudience = function() {
-    return !this.isGenre();
-  };
-
-  Weight.prototype.toAudience = function() {
-    var a;
-    if (this.isAudience()) {
-      return this;
-    }
-    a = this.get();
-    return new Weight(a[0], a[1], a[2]);
-  };
-
-  Weight.prototype.toGenre = function() {
-    var a;
-    if (this.isGenre) {
-      return this;
-    }
-    a = this.get();
-    return new Weight(a[0], a[1], a[2], 0.8);
-  };
-
-  Weight.Default = function(forGenre) {
-    if (forGenre == null) {
-      forGenre = true;
-    }
-    if (forGenre) {
-      return new Weight(0.8, 0.8, 0.8, 0.8);
-    }
-    return new Weight(0.8);
-  };
-
-  return Weight;
-
-})();
-
-
-/*
-CONTRACTS
- */
-
-SDP.GDT.Contract = (function() {
-  function Contract() {
-    var args, name, obj;
-    args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
-    this.setDescription = bind(this.setDescription, this);
-    if (args.length === 1) {
-      obj = args[0];
-      this.isAvailable = obj.isAvailable;
-      if (this.isAvailable != null) {
-        this.isAvailable.bind(this);
-      }
-      if (obj instanceof Contract) {
-        this.setDescription(obj.description);
-        this.setDesign(obj.designFactor);
-        this.setTech(obj.techFactor);
-        this.setResearch(obj.researchFactor);
-      } else {
-        this.setDescription(obj.description);
-        this.setDesign(obj.dF);
-        this.setTech(obj.tF);
-        this.setResearch(obj.rF);
-      }
-    } else {
-      this.researchFactor = void 0;
-      this.isAvailable = void 0;
-      this.setDescription(args[3]);
-      name = args[0];
-      this.getName = function() {
-        return name;
-      };
-      this.setDesign(args[1]);
-      this.setTech(args[2]);
-    }
-  }
-
-  Contract.prototype.setDescription = function(description) {
-    if (description.constructor === String) {
-      return this.description = description;
-    } else if (description.constructor === [].constructor && description[0].constructor === String) {
-      return this.description = description.join(" ");
-    }
-  };
-
-  Contract.prototype.setDesign = function(factor) {
-    if (factor.constructor === Number) {
-      return this.designFactor = factor;
-    } else if (factor.constructor === [].constructor) {
-      return this.designFactor = factor.sum();
-    }
-  };
-
-  Contract.prototype.setTech = function(factor) {
-    if (factor.constructor === Number) {
-      return this.techFactor = factor;
-    } else if (factor.constructor === [].constructor) {
-      return this.techFactor = factor.sum();
-    }
-  };
-
-  Contract.prototype.setResearch = function(factor) {
-    if (factor.constructor === Number) {
-      return this.researchFactor = factor;
-    } else if (factor.constructor === [].constructor) {
-      return this.researchFactor = factor.sum();
-    }
-  };
-
-  return Contract;
-
-})();
-
-
-/*
-EVENT
- */
-
-SDP.GDT.__notUniqueEvent = function(id) {
-  var item;
-  item = {
-    id: id
-  };
-  return !Checks.checkUniqueness(item, 'id', DecisionNotifications.modNotifications);
-};
-
-SDP.GDT.Event = (function() {
-  function Event(id, date1, isRandomEvent, ignoreLenMod) {
-    var e, ref, ref1;
-    this.date = date1;
-    this.isRandomEvent = isRandomEvent;
-    this.ignoreLenMod = ignoreLenMod;
-    this.add = bind(this.add, this);
-    this.toInput = bind(this.toInput, this);
-    if (id == null) {
-      throw new TypeError("id can't be undefined");
-    }
-    if (id instanceof Event) {
-      e = id;
-      id = e.getId();
-      this.getId = function() {
-        return id;
-      };
-      if (e.date != null) {
-        this.date = new SDP.GDT.Date(e.date);
-      }
-      this.isRandomEvent = e.isRandomEvent;
-      this.ignoreLenMod = e.ignoreLenMod;
-      this.maxTriggers = e.maxTriggers;
-      this.trigger = (ref = e.trigger) != null ? ref.bind(this) : void 0;
-      this.complete = (ref1 = e.complete) != null ? ref1.bind(this) : void 0;
-      this.getNotification = e.getNotification;
-    } else if (id.id != null) {
-      e = id;
-      id = e.id;
-      this.getId = function() {
-        return id;
-      };
-      this.date = e.date;
-      this.isRandomEvent = e.isRandomEvent;
-      this.ignoreLenMod = e.ignoreGameLengthModifier;
-      this.maxTriggers = e.maxTriggers;
-      this.trigger = e.trigger;
-      this.complete = e.complete;
-      this.getNotification = e.notification == null ? e.getNotification : (function(company) {
-        return e.notification;
-      });
-    } else {
-      this.maxTriggers = 1;
-      this.trigger = function(company) {
-        return false;
-      };
-      this.complete = function(decision) {};
-      this.getNotification = function(company) {
-        return new SDP.GDT.Notification(this);
-      };
-      this.getId = function() {
-        return id;
-      };
-    }
-    this.getNotification.bind(this);
-    while (SDP.GDT.__notUniqueEvent(id)) {
-      id += '_';
-    }
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Event.prototype.toInput = function() {
-    return {
-      id: this.getId(),
-      date: this.date(!(this.date instanceof SDP.GDT.Date) ? this.date.toString() : void 0),
-      isRandomEvent: this.isRandomEvent,
-      ignoreGameLengthModifier: this.ignoreLenMod,
-      maxTriggers: this.maxTriggers,
-      trigger: this.trigger,
-      getNotification: this.getNotification,
-      complete: this.complete
-    };
-  };
-
-  Event.prototype.add = function() {
-    return GDT.addEvent(this);
-  };
-
-  return Event;
-
-})();
-
-
-/*
-NOTIFICATION
- */
-
-__notificationRep = Notification;
-
-SDP.GDT.Notification = (function() {
-  function Notification() {
-    var args, event, id, obj;
-    args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
-    this.trigger = bind(this.trigger, this);
-    this.addAsEvent = bind(this.addAsEvent, this);
-    this.toInput = bind(this.toInput, this);
-    this.removeOption = bind(this.removeOption, this);
-    this.addOptions = bind(this.addOptions, this);
-    this.addOption = bind(this.addOption, this);
-    if (args.length === 1) {
-      obj = args[0];
-      if (obj instanceof __notificationRep) {
-        this.header = obj.header;
-        this.text = obj.text;
-        this.buttonTxt = obj.buttonText;
-        this.weeksUntilFire = obj.weeksUntilFire;
-        this.image = obj.image;
-        this.options = obj.options.slice();
-        id = obj.sourceId;
-      } else if (obj instanceof Notification) {
-        this.header = obj.header;
-        this.text = obj.text;
-        this.buttonTxt = obj.buttonText;
-        this.weeksUntilFire = obj.weeksUntilFire;
-        this.image = obj.image;
-        this.options = obj.options.slice();
-        id = obj.getSourceId();
-        event = obj.getEvent();
-      }
-    } else {
-      if (args[0].constructor === String) {
-        this.header = args[0];
-        this.text = args[1];
-        this.buttonText = args[2];
-        this.weeksUntilFire = args[3];
-        this.image = args[4];
-        event = args[5];
-      } else {
-        event = args[0];
-        this.header = args[1];
-        this.text = args[2];
-        this.buttonText = args[3];
-        this.weeksUntilFire = args[4];
-        this.image = args[5];
-      }
-      id = (SDP.GDT.Event != null) && event instanceof SDP.GDT.Event ? event.getId() : event.id != null ? event.id : 0;
-      this.options = [];
-    }
-    this.sourceId = function() {
-      return id;
-    };
-    if (event != null) {
-      this.getEvent = (function() {
-        return event;
-      });
-    }
-  }
-
-  Notification.prototype.addOption = function(text) {
-    if (this.options.length < 3) {
-      this.options.push(text.localize("decision action button"));
-    }
-    return this;
-  };
-
-  Notification.prototype.addOptions = function() {
-    var index, txts;
-    txts = 1 <= arguments.length ? slice.call(arguments, 0) : [];
-    if (txts.length + this.options.length < 3) {
-      this.options.push(txts);
-    } else {
-      index = 0;
-      while (this.options.length < 3) {
-        this.options.push(txts[index++].localize("decision action button"));
-      }
-    }
-    return this;
-  };
-
-  Notification.prototype.removeOption = function(index) {
-    this.options.splice(index, 1);
-    return this;
-  };
-
-  Notification.prototype.toInput = function() {
-    return new __notificationRep({
-      header: this.header,
-      text: this.text,
-      buttonText: this.buttonText,
-      weeksUntilFire: this.weeksUntilFire,
-      image: this.image,
-      options: this.options,
-      sourceId: this.sourceId,
-      event: this.getEvent()
-    });
-  };
-
-  Notification.prototype.addAsEvent = function() {
-    if (this.getEvent() != null) {
-      return SDP.GDT.addEvent(this);
-    }
-  };
-
-  Notification.prototype.trigger = function() {
-    return SDP.GDT.triggerNotification(this);
-  };
-
-  return Notification;
-
-})();
-
-
-/*
-PLATFORM
- */
-
-SDP.GDT.__notUniquePlatform = function(id) {
-  var item;
-  item = {
-    id: id
-  };
-  return !Checks.checkUniqueness(item, 'id', Platforms.allPlatforms);
-};
-
-SDP.GDT.Platform = (function() {
-  Platform.prototype.events = [];
-
-  Platform.prototype.marketPoints = [];
-
-  Platform.prototype.genreWeight = Weight.Default();
-
-  Platform.prototype.audienceWeight = Weight.Default(false);
-
-  function Platform(name, id) {
-    if (id == null) {
-      id = name;
-    }
-    this.setWeight = bind(this.setWeight, this);
-    this.removeMarketDate = bind(this.removeMarketDate, this);
-    this.addMarketPoint = bind(this.addMarketPoint, this);
-    this.removeEvent = bind(this.removeEvent, this);
-    this.addEvent = bind(this.addEvent, this);
-    name = name.localize("game platform");
-    this.getName = function() {
-      return name;
-    };
-    this.company = null;
-    this.startAmount = 0;
-    this.unitsSold = 0;
-    this.licensePrice = 0;
-    this.publishDate = SDP.GDT.Date(1, 1, 1);
-    this.retireDate = SDP.GDT.Date.Max();
-    this.devCost = 0;
-    this.techLevel = 1;
-    this.iconUri = void 0;
-    this.baseIconUri = void 0;
-    this.imageDates = void 0;
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Platform.prototype.addEvent = function(e) {
-    if (e instanceof SDP.GDT.Event) {
-      this.events.push(e);
-    }
-    return this;
-  };
-
-  Platform.prototype.removeEvent = function(id) {
-    var index;
-    index = this.events.findIndex(function(val) {
-      return val.id === id;
-    });
-    if (index !== -1) {
-      return this.events.splice(index, 1);
-    }
-  };
-
-  Platform.prototype.addMarketPoint = function(date, amount) {
-    if (date == null) {
-      return;
-    }
-    if (date instanceof SDP.GDT.Date) {
-      date = date.toString();
-    } else if ((date.week != null) && (date.month != null) && (date.year != null)) {
-      date = "{0}/{1}/{2}".format(date.year, date.month, date.week);
-    }
-    if (typeof date !== 'string') {
-      return;
-    }
-    if ((date != null) && (amount != null)) {
-      this.marketPoints.push({
-        'date': date,
-        'amount': amount
-      });
-    }
-    return this;
-  };
-
-  Platform.prototype.removeMarketDate = function(date) {
-    var index;
-    index = this.marketPoints.findIndex(function(val) {
-      return val.date === date;
-    });
-    if (index !== -1) {
-      return this.marketPoints.splice(index, 1);
-    }
-  };
-
-  Platform.prototype.setWeight = function(weight) {
-    if (SDP.GDT.Weight == null) {
-      return;
-    }
-    if (!(weight instanceof SDP.GDT.Weight)) {
-      return;
-    }
-    if (weight.isGenre()) {
-      this.genreWeight = weight;
-    } else {
-      this.audienceWeight = weight;
-    }
-    return this;
-  };
-
-  Platform.prototype.getPrimEvents = function() {
-    var arr, evt, k, len, ref;
-    arr = [];
-    ref = this.events;
-    for (k = 0, len = ref.length; k < len; k++) {
-      evt = ref[k];
-      arr.push(evt.toInput());
-    }
-    return arr;
-  };
-
-  Platform.prototype.toInput = function() {
-    var id;
-    id = this.getId();
-    while (SDP.GDT.__notUniquePlatform(id)) {
-      id += '_';
-    }
-    this.getId = function() {
-      return id;
-    };
-    return {
-      id: this.getId(),
-      name: this.getName(),
-      iconUri: this.iconUri,
-      imageDates: this.imageDates,
-      baseIconUri: this.baseIconUri,
-      company: typeof this.company.getName === "function" ? this.company.getName() : this.company.toString(),
-      startAmount: this.startAmount,
-      unitsSold: this.unitsSold,
-      marketKeyPoints: this.marketPoints,
-      licensePrice: this.licensePrice,
-      published: this.publishDate,
-      platformRetireDate: this.retireDate,
-      developmentCost: this.devCost,
-      genreWeightings: this.genreWeight.toGenre().get(),
-      audienceWeightings: this.audienceWeight.toAudience().get(),
-      techLevel: this.techLevel,
-      events: this.getPrimEvents()
-    };
-  };
-
-  return Platform;
-
-})();
-
-
-/*
-PUBLISHER
- */
-
-SDP.GDT.__notUniquePublisher = function(id) {
-  var item;
-  item = {
-    id: id
-  };
-  return !Checks.checkUniqueness(item, 'id', ProjectContracts.getAllPublishers());
-};
-
-SDP.GDT.Publisher = (function() {
-  Publisher.prototype.topicOverride = [];
-
-  Publisher.prototype.platformOverride = [];
-
-  Publisher.prototype.genreWeightings = SDP.GDT.Weight.Default();
-
-  Publisher.prototype.audWeightings = SDP.GDT.Weight.Default(false);
-
-  function Publisher(name, id) {
-    if (id == null) {
-      id = name;
-    }
-    this.toInput = bind(this.toInput, this);
-    this.getTopic = bind(this.getTopic, this);
-    this.getPlatform = bind(this.getPlatform, this);
-    this.getGenre = bind(this.getGenre, this);
-    this.getAudience = bind(this.getAudience, this);
-    this.toString = bind(this.toString, this);
-    this.setWeight = bind(this.setWeight, this);
-    this.addPlatformOverride = bind(this.addPlatformOverride, this);
-    this.addTopicOverride = bind(this.addTopicOverride, this);
-    if ((SDP.GDT.Company != null) && name instanceof SDP.GDT.Company) {
-      this.getCompany = function() {
-        return name;
-      };
-      id = name.getId();
-      name = name.getName();
-    } else if ((name != null) && typeof name === 'object') {
-      name.isPrimitive = true;
-      this.getCompany = function() {
-        return name;
-      };
-      id = name.id;
-      name = name.name;
-    }
-    name = name.localize("publisher");
-    this.getId = function() {
-      return id;
-    };
-    this.getName = function() {
-      return name;
-    };
-    this.startWeek = void 0;
-    this.retireWeek = void 0;
-  }
-
-  Publisher.prototype.addTopicOverride = function(id, weight) {
-    if (Topics.topics.findIndex(function(val) {
-      return val.id === id;
-    }) !== -1) {
-      return this.topicOverride.push({
-        id: id,
-        weight: weight.clamp(0, 1)
-      });
-    }
-  };
-
-  Publisher.prototype.addPlatformOverride = function(id, weight) {
-    if (Platforms.allPlatforms.findIndex(function(val) {
-      return val.id === id;
-    }) !== -1) {
-      return this.platformOverride.push({
-        id: id,
-        weight: weight.clamp(0, 1)
-      });
-    }
-  };
-
-  Publisher.prototype.setWeight = function(weight) {
-    if (weight.isGenre()) {
-      this.genreWeightings = weight;
-    }
-    if (weight.isAudience()) {
-      return this.audWeightings = weight;
-    }
-  };
-
-  Publisher.prototype.toString = function() {
-    return this.getName();
-  };
-
-  Publisher.prototype.getAudience = function(random) {
-    var a, auds, k, len, ref, v;
-    auds = SDP.Enum.Audience.toArray();
-    auds.forEach(function(val, i, arr) {
-      return arr.push(val, val);
-    });
-    ref = SDP.Enum.Audience.toArray();
-    for (k = 0, len = ref.length; k < len; k++) {
-      a = ref[k];
-      v = Math.floor(General.getAudienceWeighting(this.audWeightings.get(), a) * 10) - 8;
-      if (Math.abs(v) > 2) {
-        continue;
-      }
-      while (v > 0) {
-        auds.push(a);
-        v--;
-      }
-      while (v < 0) {
-        auds.splice(auds.findIndex(function(val) {
-          return val === a;
-        }), 1);
-        v++;
-      }
-    }
-    return auds.pickRandom(random);
-  };
-
-  Publisher.prototype.getGenre = function(random) {
-    var defGenres, g, genres, k, len, v;
-    defGenres = SDP.Enum.Genre.toArray();
-    genres = SDP.Enum.Genre.toArray();
-    genres.forEach(function(val, i, arr) {
-      return arr.push(val, val);
-    });
-    for (k = 0, len = defGenres.length; k < len; k++) {
-      g = defGenres[k];
-      v = Math.floor(General.getGenreWeighting(this.genreWeightings.get(), g) * 10) - 8;
-      if (Math.abs(v) > 2) {
-        continue;
-      }
-      while (v > 0) {
-        genres.push(g);
-        v--;
-      }
-      while (v < 0) {
-        genres.splice(genres.findIndex(function(val) {
-          return val === g;
-        }), 1);
-        v++;
-      }
-    }
-    return genres.pickRandom(random);
-  };
-
-  Publisher.prototype.getPlatform = function(random, defPlats) {
-    var k, len, p, platforms, v;
-    defPlats = defPlats.filter(function(p) {
-      return this.platformOverride.findIndex(function(v) {
-        return v.id === p.id;
-      }) !== -1;
-    });
-    if (!defPlats) {
-      return;
-    }
-    platforms = defPlats.splice();
-    platforms.forEach(function(val, i, arr) {
-      return arr.push(val, val);
-    });
-    for (k = 0, len = defPlats.length; k < len; k++) {
-      p = defPlats[k];
-      v = Math.floor(this.platformOverride.find(function(val) {
-        return val.id === p.id;
-      }).weight * 10) - 8;
-      if (Math.abs(v) > 2) {
-        continue;
-      }
-      while (v > 0) {
-        platforms.push(p);
-        v--;
-      }
-      while (v < 0) {
-        platforms.splice(platforms.findIndex(function(val) {
-          return val === g;
-        }), 1);
-        v++;
-      }
-    }
-    return platforms.pickRandom(random);
-  };
-
-  Publisher.prototype.getTopic = function(random, defTopics) {
-    var k, len, p, topics, v;
-    defTopics = defTopics.filter(function(t) {
-      return this.topicOverride.findIndex(function(v) {
-        return v.id === t.id;
-      }) !== -1;
-    });
-    if (!defPlats) {
-      return;
-    }
-    topics = defTopics.map(function(val) {
-      return val;
-    });
-    topics.forEach(function(val, i, arr) {
-      return arr.push(val, val);
-    });
-    for (k = 0, len = defTopics.length; k < len; k++) {
-      p = defTopics[k];
-      v = Math.floor(this.topicOverride.find(function(val) {
-        return val.id === p.id;
-      }).weight * 10) - 8;
-      if (Math.abs(v) > 2) {
-        continue;
-      }
-      while (v > 0) {
-        topics.push(p);
-        v--;
-      }
-      while (v < 0) {
-        topics.splice(topics.findIndex(function(val) {
-          return val === g;
-        }), 1);
-        v++;
-      }
-    }
-    return topics.pickRandom(random);
-  };
-
-  Publisher.prototype.toInput = function() {
-    var id;
-    id = this.getId();
-    while (SDP.GDT.__notUniquePlatform(id)) {
-      id += '_';
-    }
-    this.getId = function() {
-      return id;
-    };
-    return {
-      id: this.getId(),
-      name: this.getName(),
-      isCompany: this.getCompany() != null,
-      company: this.getCompany(),
-      getGenre: this.getGenre,
-      getAudience: this.getAudience,
-      getTopic: this.getTopic,
-      getPlatform: this.getPlatform
-    };
-  };
-
-  return Publisher;
-
-})();
-
-
-/*
-RESEARCH
- */
-
-SDP.GDT.__notUniqueResearch = function(id) {
-  var item;
-  item = {
-    id: id
-  };
-  return !Checks.checkUniqueness(item, 'id', Research.getAllItems());
-};
-
-SDP.GDT.Research = (function() {
-  function Research(name, id) {
-    if (id == null) {
-      id = name;
-    }
-    this.toInput = bind(this.toInput, this);
-    name = name.localize("research");
-    this.getName = function() {
-      return name;
-    };
-    this.canResearch = function(company) {
-      return true;
-    };
-    this.v = void 0;
-    this.category = SDP.Enum.ResearchCategory.ENGINE.value;
-    this.categoryDisplayName = this.category.localize();
-    this.pointsCost = 0;
-    this.duration = 0;
-    this.cost = 0;
-    this.enginePoints = 0;
-    this.engineCost = 0;
-    this.group = void 0;
-    this.canUse = function(game) {
-      return true;
-    };
-    this.complete = function() {};
-    this.consolePart = false;
-    this.showXPGain = true;
-    while (SDP.GDT.__notUniqueResearch(id)) {
-      id += '_';
-    }
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Research.prototype.toInput = function() {
-    return {
-      id: this.getId(),
-      name: this.getName(),
-      canResearch: this.canResearch,
-      canUse: this.canUse,
-      v: this.v,
-      pointsCost: this.pointsCost,
-      duration: this.duration,
-      cost: this.cost,
-      enginePoints: this.enginePoints,
-      engineCost: this.engineCost,
-      category: this.category,
-      categoryDisplayName: this.categoryDisplayName,
-      group: this.group,
-      complete: this.complete,
-      consolePart: this.consolePart,
-      showXPGain: this.showXPGain
-    };
-  };
-
-  return Research;
-
-})();
-
-
-/*
-TOPIC
- */
-
-SDP.GDT.__notUniqueTopic = function(id) {
-  var item;
-  item = {
-    id: id
-  };
-  return !Checks.checkUniqueness(item, 'id', Topics.topics);
-};
-
-SDP.GDT.Topic = (function() {
-  function Topic(name, id, genreWeight, audienceWeight) {
-    var c, cats, g, k, l, len, len1, ref, ref1;
-    if (id == null) {
-      id = name;
-    }
-    this.genreWeight = genreWeight != null ? genreWeight : SDP.GDT.Weight.Default();
-    this.audienceWeight = audienceWeight != null ? audienceWeight : SDP.GDT.Weight.Default(false);
-    this.add = bind(this.add, this);
-    this.toInput = bind(this.toInput, this);
-    this.setOverride = bind(this.setOverride, this);
-    name = name.localize("topic");
-    this.getName = function() {
-      return name;
-    };
-    this.missionOverride = [];
-    ref = SDP.Enum.Genre.toArray();
-    for (k = 0, len = ref.length; k < len; k++) {
-      g = ref[k];
-      cats = [];
-      ref1 = SDP.Enum.ResearchCategory;
-      for (l = 0, len1 = ref1.length; l < len1; l++) {
-        c = ref1[l];
-        cats.push(0);
-      }
-      this.missionOverride.push(cats);
-    }
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Topic.prototype.setOverride = function(genreName, categoryName, value) {
-    var pos, ref, ref1;
-    pos = genreName.constructor === String && categoryName.constructor === String ? SDP.GDT.getOverridePositions(genreName, categoryName) : [genreName, categoryName];
-    if ((0 <= (ref = pos[0]) && ref <= this.missionOverride.length) && (0 <= (ref1 = pos[1]) && ref1 <= this.missionOverride[pos[0]].length)) {
-      return this.missionOverride[pos[0]][pos[1]] = value;
-    }
-  };
-
-  Topic.prototype.toInput = function() {
-    var id;
-    id = this.getId();
-    while (SDP.GDT.__notUniqueTopic(id)) {
-      id += '_';
-    }
-    this.getId = function() {
-      return id;
-    };
-    return {
-      id: this.getId(),
-      name: this.getName(),
-      genreWeightings: this.genreWeight instanceof SDP.GDT.Weight ? this.genreWeight.toGenre().get() : this.genreWeight,
-      audienceWeightings: this.audienceWeight instanceof SDP.GDT.Weight ? this.audienceWeight.toAudience().get() : this.audienceWeight,
-      missionOverrides: this.missionOverride
-    };
-  };
-
-  Topic.prototype.add = function() {
-    return SDP.GDT.addTopic(this);
-  };
-
-  return Topic;
-
-})();
-
-
-/*
-COMPANY
- */
-
-SDP.GDT.Company = (function() {
-  function Company(name, id) {
-    var c;
-    if (id == null) {
-      id = name.replace(/\s/g, "");
-    }
-    this.toString = bind(this.toString, this);
-    this.getPlatform = bind(this.getPlatform, this);
-    c = Companies.getAllCompanies().find(function(val) {
-      return val.id === id;
-    });
-    if (c == null) {
-      c = Companies.createCompany({
-        name: name,
-        id: id
-      });
-    }
-    this.platforms = c.platforms;
-    this.addPlatform = c.addPlatform;
-    this.addPlatform.bind(this);
-    this.sort = c.sort;
-    this.sort.bind(this);
-    name = c.name;
-    this.getName = function() {
-      return name;
-    };
-    id = c.id;
-    this.getId = function() {
-      return id;
-    };
-  }
-
-  Company.prototype.getPlatform = function(name) {
-    var p;
-    p = this.platforms.find(function(val) {
-      return platform.name === name;
-    });
-    if (p == null) {
-      p = this.platforms.find(function(val) {
-        return platform.id === name;
-      });
-    }
-    return p;
-  };
-
-  Company.prototype.toString = function() {
-    return this.getName();
-  };
-
-  return Company;
-
-})();

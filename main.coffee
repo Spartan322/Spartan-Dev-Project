@@ -535,29 +535,32 @@ SDP.Util = ( ->
 				if not fsys.path.resolve(uri).startsWith(fsys.cwd()) then throw new TypeError("SDP's Path may not leave the current working directory")
 
 			cd: (to) ->
-				uri = fsys.path.resolve(@get, to)
+				uri = fsys.path.resolve(@get(), to)
 				fsys.Path.check(uri)
 				@get = ->
 					fsys.Path.check(uri)
 					uri
 
 			basename: (ext) ->
-				fsys.path.basename(@get, ext)
+				fsys.path.basename(@get(), ext)
 
 			dirname: ->
-				fsys.path.dirname(@get)
+				fsys.path.dirname(@get())
 
 			extname: ->
-				fsys.path.extname(@get)
+				fsys.path.extname(@get())
 
 			parse: ->
-				fsys.path.parse(@get)
+				fsys.path.parse(@get())
 
 			isFile: ->
-				fs.lstatSync(@get).isFile()
+				fs.lstatSync(@get()).isFile()
 
 			isDirectory: ->
-				fs.lstatSync(@get).isDirectory()
+				fs.lstatSync(@get()).isDirectory()
+
+			convert: ->
+				@get()
 
 		fsys
 	)()
@@ -1054,39 +1057,93 @@ SDP.Functional.addNotificationToQueue = (item) ->
 SDP.Class = (
 	classes = {}
 
-	class classes.Research
+	convertClasses = (classObj) ->
+		switch classObj.constructor
+			when SDP.Util.Date, SDP.Util.Weight, SDP.Util.Filesystem.Path then return classObj.convert()
+			when Array
+				classObj[i] = convertClasses(classObj[i]) for i of classObj
+				return classObj
+			else return classObj
 
-	class classes.Platform
+	class Base
+		constructor: (args...) ->
+			if SDP.Util.isObject(args[0])
+				@[arg] = args[0][arg] for arg in args[0] when args[0].hasOwnProperty(arg)
+				@wasNativeObject = true
+			else @wasNativeObject = false
+			@id ?= @name
 
-		constructor: (@name, @companyId, @id = @name) ->
-			@startAmount = 0
-			@unitsSold = 0
-			@licensePrice = 0
-			@publishDate = new SDP.Util.Date(false)
-			@retireDate = new SDP.Util.Date(true)
-			@devCost = 0
-			@techLevel = 0
-			@iconUri = new SDP.Util.Filesystem.Path()
-			@imageDates = []
+	class classes.Research extends Base
+		constructor: (@name, @type, @category, @categoryDisplayName = @category, @id) ->
+			super
 
+		convert: ->
+			item = {
+				name: @name
+				id: @id
+				type: @type
+				v: @v
+				pointsCost: @pointsCost
+				duration: @duration
+				researchCost: @researchCost
+				devCost: @devCost
+				engineCost: @engineCost
+				enginePoints: @enginePoints
+				category: @category
+				categoryDisplayName: @categoryDisplayName
+				group: @group
+				consolePart: @consolePart
+				engineStart: @engineStart
+				canUse: if @canUse? then @canUse.bind(item) else undefined
+				canResearch: if @canResearch? then @canResearch.bind(item) else undefined
+			}
 
-	class classes.Topic
+	class classes.Platform extends Base
+		constructor: (@name, @company, @id = @name) ->
+			super
+			@startAmount ?= 0
+			@unitsSold ?= 0
+			@audienceWeight ?= new SDP.Util.Weight(true)
+			@genreWeight ?= new SDP.Util.Weight(false)
+			@licensePrice ?= 0
+			@publishDate ?= new SDP.Util.Date(false)
+			@retireDate ?= new SDP.Util.Date(true)
+			@devCost ?= 0
+			@techLevel ?= 0
+			@iconUri ?= new SDP.Util.Filesystem.Path()
+
+		convert: ->
+			{
+				name: @name
+				id: @id
+				company: @company
+				startAmount: @startAmount
+				unitsSold: @unitsSold
+				licensePrice: @licensePrice
+				publishDate: convertClasses(@publishDate)
+				retireDate: convertClasses(@retireDate)
+				genreWeight: convertClasses(@genreWeight)
+				audienceWeight: convertClasses(@audienceWeight)
+				techLevel: @techLevel
+				iconUri: convertClasses(@iconUri)
+				imageDates: convertClasses(@imageDates)
+				marketPoints: convertClasses(@marketPoints)
+			}
+
+	class classes.Topic extends Base
 		BASE_OVERRIDE = [0,0,0,0,0,0,0,0,0]
 
-		constructor: (@name, @id = @name) ->
-			if @name.constructor is Object
-				@id = @name.id
-				@audienceWeight = new SDP.Util.Weight(@name.audienceWeight)
-				@genreWeight = new SDP.Util.Weight(@name.genreWeight)
-				@overrides = @name.overrides or @name.missionOverrides
-				@name = @name.name
-			else
-				@audienceWeight = new SDP.Util.Weight(true)
-				@genreWeight = new SDP.Util.Weight(false)
+		constructor: (@name, @id) ->
+			super
+			@audienceWeight ?= new SDP.Util.Weight(true)
+			@genreWeight ?= new SDP.Util.Weight(false)
+			if not @overrides? or not SDP.Util.isArray(@overrides)
 				@overrides = [BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE,BASE_OVERRIDE]
+			@overrides.push(BASE_OVERRIDE) while @overrides.length < 6
+			o.push(0) for o in @overrides when o.length < 9
 
 		setOverride: (genreName, catName, value) ->
-			if SDP.Util.isArry(genreName)
+			if SDP.Util.isArray(genreName)
 				@overrides = genreName
 				return @
 			if SDP.Util.isArray(catName) then value = catName
@@ -1102,61 +1159,43 @@ SDP.Class = (
 			{
 				name: @name
 				id: @id
-				genreWeight: @genreWeight
-				audienceWeight: @audienceWeight
+				genreWeight: convertClasses(@genreWeight)
+				audienceWeight: convertClasses(@audienceWeight)
 				overrides: @overrides
 			}
 
-	class classes.ResearchProject
+	class classes.ResearchProject extends Base
+		constructor: (@name, @description, @id) ->
+			super
+			@pointsCost ?= 0
+			@iconUri ?= new SDP.Util.Filesystem.Path()
+			@targetZone ?= 2
+
+		convert: ->
+			item = {
+				name: @name
+				id: @id
+				description: @description
+				pointsCost: @pointsCost
+				iconUri: convertClasses(@iconUri)
+				targetZone: @targetZone
+				repeatable: @repeatable
+				canResearch: if @canResearch? then @canResearch.bind(item) else undefined
+				complete: if @complete? then @complete.bind(item) else undefined
+				cancel: if @cancel? then @cancel.bind(item) else undefined
+			}
 
 	class classes.Training
 
 	class classes.Contract
 
 	class classes.Publisher
-
-	class classes.Reviewer
-
-	class classes.ReviewMessage
-
-	class classes.Company
-		platforms = []
-
-		constructor: (name, id = name) ->
-			@getName = -> name
-			@getId = -> id
-			# companies should not allow internal modification after construction
-
-		addPlatform: (item) ->
-			item.companyId = @getId()
-			platforms.push(item)
-
-		getPlatform: (index) ->
-			platforms[index]
 )()
 
 SDP.GDT.addEvent = (item) ->
 	item = item.getEvent() if item.getEvent?
 	item = item.event if item.event?
-	item = item.toInput() if SDP.GDT.Event? and item instanceof SDP.GDT.Event
-	item.notification = item.notification.toInput() if SDP.GDT.Notification? and item.notification instanceof SDP.GDT.Notification
 	GDT.addEvent(item)
-
-SDP.GDT.addCompany = (item) ->
-	if item.constructor is String then item = Companies.createCompany(item)
-	item = item.toInput() if SDP.GDT.Company? and item instanceof SDP.GDT.Company
-	item.sort = ->
-		item.platforms.sort (a,b) ->
-			General.getWeekFromDateString(a.published) - General.getWeekFromDateString(b.published)
-	item.addPlatform = (platform) ->
-		platform.company = item.name
-		SDP.GDT.addPlatform(platform)
-		item.platforms.push(platform)
-		item.sort()
-		platform
-	if Checks.checkPropertiesPresent(item, ['id', 'name']) and Checks.checkUniqueness(item, 'id', Companies.getAllCompanies())
-		Companies.moddedCompanies.push(item)
-	return item
 
 SDP.GDT = ( ->
 	GDT = {}
@@ -1244,16 +1283,26 @@ SDP.GDT = ( ->
 	GameManager.getAvailableGameFeatures = GDT.Research.getAvailable
 	General.getAvailableEngineParts = GDT.Research.getAvailableEngineParts
 
-	GDT.Platform = {
-		platforms: Platforms.allPlatforms
-		getAll: -> GDT.Platform.platforms.slice()
-		getAvailable: (company) ->
-			GDT.Company.getPlatformsFor(company).filter((p) ->
-				Platforms.getRetireDate(p) > Math.floor(company.currentWeek) and not p.isCustom or p.isCustom is true and (company.currentWeek > General.getWeekFromDateString(p.published) and not p.soldOut)
-			)
-		getById: (id) -> GDT.Platform.getAll().first((p) -> p.id is id)
-	}
-	Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable
+	( ->
+		oldPlatformImage = Platforms.getPlatformImage
+		GDT.Platform = {
+			platforms: Platforms.allPlatforms
+			getAll: -> GDT.Platform.platforms.slice()
+			getAvailable: (company) ->
+				GDT.Company.getPlatformsFor(company).filter((p) ->
+					Platforms.getRetireDate(p) > Math.floor(company.currentWeek) and not p.isCustom or p.isCustom is true and (company.currentWeek > General.getWeekFromDateString(p.published) and not p.soldOut)
+				)
+			getImage: (platform, week) ->
+				if platform.id is 'PC' then return oldPlatformImage(platform, week)
+				if not platform.imageDates then return platform.iconUri
+				else if week
+					image = "{0}/{1}-{2}.png".format(baseUri, platform.id, String(i+1)) for date, i in platform.imageDates when General.getWeekFromDateString(date) <= week and i isnt 0
+					if not image then return "{0}/{1}.png".format(baseUri, platform.id) else return image
+			getById: (id) -> GDT.Platform.getAll().first((p) -> p.id is id)
+		}
+		Platforms.getPlatformsOnMarket = GDT.Platform.getAvailable
+		Platforms.getPlatformImage = GDT.Platform.getImage
+	)()
 
 	GDT.Topic = {
 		topics: Topics.topics
@@ -2129,11 +2178,9 @@ SDP.GDT = ( ->
 	)()
 )()
 
-
-
 ###
 Adds company tracking system
-###
+
 Companies.createCompany = (item) ->
 	if item.constructor is String then item = {name: item}
 	if not item.id? and item.name? then item.id = name.replace(/\s/g,"")
@@ -2180,618 +2227,14 @@ Companies.getAvailableCompanies = (company) ->
 	week = Math.floor(company.currentWeek)
 	Companies.getAllCompanies().filter (val) ->
 		General.getWeekFromDateString(val.platforms[0].published) <= week
-
 ###
-UTIL
-###
-SDP.Util = {}
 
-SDP.Util.getRandomInt = (random, max) -> Math.max max - 1, Math.floor random.random() * max unless typeof random?.random isnt 'function'
-
-SDP.Util.generateNewSeed = (settings) ->
-	settings.seed = Math.floor(Math.random() * 65535)
-	settings.expireBy = GameManager.gameTime + 24 * GameManager.SECONDS_PER_WEEK * 1e3
-	settings.contractsDone = []
-
-SDP.Util.getSeed = (settings) ->
-	if not settings.seed
-		SDP.Util.generateNewSeed(settings)
-		settings.intialSettings = true
-	else if settings.expireBy <= GameManager.gameTime
-		SDP.Util.generateNewSeed(settings)
-		settings.intialSettings = false
-	settings.seed
-
-###
-LOG
-###
-###
-Implements the log functionality of UltimateLib, allows easy conversion from UltimateLib
-###
-SDP.Logger = ((s) ->
-
-	toTimeStr = (date) ->
-		forceZero = (n) -> if n >= 0 and n < 10 then "0" + e else e + ""
-		return [
-			[
-				forceZero date.getFullYear()
-				forceZero date.getMonth()+1
-				date.getDate()
-			].join("-")
-			[
-				forceZero date.getHours()
-				forceZero date.getMinutes()
-				forceZero date.getSeconds()
-			].join(":")
-		].join(" ")
-
-	s.enabled = false
-
-	s.log = (e, c) ->
-		return if not s.enabled
-		timestamp = toTimeStr(new Date())
-		str = ""
-		str = if c? then "#{timestamp} : Error! #{e}\n #{c.message}" else "#{timestamp} : #{e}"
-		console.log(str)
-
-	s
-)(SDP.Logger or {})
-
-###
-STORAGE
-###
-###
-Implements the jStorage functionality of UltimateLib, allows easy conversion from UltimateLib
-###
-SDP.Storage = ((s)->
-
-	log = SDP.Logger.log
-
-	s.read = (storeName, defaultVal) ->
-		try
-			log "SDP.Storage.read Started from localStorage with ID SPD.Storage.#{f}"
-			if s.getStorageFreeSize()
-				if defaultVal? then $.jStorage.get("SDP.Storage."+storeName, defaultVal) else $.jStorage.get("SDP.Storage."+storeName)
-		catch e
-			log "SDP.Storage.read Local storage error occured. Error: #{e.message}"
-			false
-
-	s.write = (storeName, val, options) ->
-		return if not s.getStorageFreeSize()
-		try
-			if options? then $.jStorage.set("SDP.Storage."+storeName, val, {TTL: options}) else $.jStorage.set("SDP.Storage."+storeName)
-			log "SDP.Storage.write Local storage successful at ID SDP.Storage.#{f}"
-		catch e
-			log "SDP.Storage.write Local storage error occured! Error: #{e.message}"
-			false
-
-	s.clearCache = -> $.jStorage.flush()
-
-	s.getAllKeys = -> $.jStorage.index()
-
-	s.getStorageSize = -> $.jStorage.storageSize()
-
-	s.getStorageFreeSize = -> $.jStorage.storageAvailable()
-
-	s.reload = -> $.jStorage.reInit()
-
-	s.onKeyChange = (front, back, func) -> $.jStorage.listenKeyChange("SDP.Storage." + front + "." + back, func)
-
-	s.removeListeners = (front, back, func) -> if func? then $.jStorage.stopListening("SDP.Storage." + front + "." + back, func) else $.jStorage.stopListening("SDP.Storage." + front + "." + back)
-
-	s
-)(SDP.Storage or {})
-###
-GRAPHICAL
-###
-###
-Implements many common graphical functionalities of UltimateLib, allows easy conversion from UltimateLib
-###
-SDP.Graphical = ((s) ->
-
-	s.Elements = ((e) ->
-		e.Head = $("head")
-		e.Body = $("body")
-		e.SettingsPanel = $("#settingsPanel")
-		e.GameContainerWrapper = $("#gameContainerWrapper")
-		e.SimpleModalContainer = $("#simplemodal-container")
-		e
-	)(s.Elements or {})
-
-	s.Visuals = ((v) ->
-		v.Custom = ((c) ->
-			vis = "SDP-Visuals-Custom"
-			c.setCss = (id, content) ->
-				id = vis+id
-				$("head").append("<style id='#{e}' type='text/css'></style>") if $("##{id}").length is 0
-				$("head").find("##{id}").append(content)
-
-			c.addCss = (id, content) ->
-				id = vis+id
-				$("head").append("<style id='#{e}' type='text/css'></style>") if $("##{id}").length is 0
-				$("head").find("##{id}").html(content)
-			c
-		)(v.Custom or {})
-
-		v
-	)(s.Visuals or {})
-
-	panelChildren = s.Elements.SettingsPanel.children()
-	div = $ document.createElement("div")
-	div.attr("id", "SDPConfigurationTabs")
-	div.css { width: "100%", height: "auto"}
-	sdpElement = $ document.createElement("sdp")
-	sdpElement.attr("id", "SDPConfigurationTabsList")
-	sdpElement.append('<li><a href="#SDPConfigurationDefaultTabPanel">Game</a></li>')
-	div2 = $(document.createElement("div"))
-	div2.attr("id", "SDPConfigurationDefaultTabPanel")
-	sdpElement.appendTo(div)
-	div2.appendTo(div)
-	panelChildren.appendTo(div.find("#SDPConfigurationDefaultTabPanel").first())
-	div.appendTo(SDP.Graphical.Elements.SettingsPanel)
-	div.tabs()
-	div.find(".ui-tabs .ui-tabs-nav li a").css { fontSize: "7pt" }
-	SDP.Graphical.Visuals.Custom.setCss("advanceOptionsCss", "#newGameView .featureSelectionPanel { overflow-x: none overflow-y: auto }</style>")
-	SDP.Graphical.Visuals.Custom.setCss("settingPanelCss", ".ui-dialog .ui-dialog-content { padding: .5em 1em 1em .5em overflow-x: none overflow-y: visible }")
-
-	a.setLayoutCss = (modName) ->
-		b = $ 'link[href$="layout.css"]'
-		b.attr("href", ".mods/#{modName}/css/layout.css")
-
-	s.addTab = (tabId, category, content) ->
-		div = $ document.createElement("div")
-		div.attr { id: tabId }
-		div.css {width: "100%", height: "auto", display: "block"}
-		div2 = $ document.createElement("div")
-		div2.attr "id", "#{tabId}Container"
-		div.append(div2)
-		div2.append(content)
-		configTabs = $ "SDPConfigurationTabs"
-		configTabs.tabs("add", "##{tabId}", category)
-		configTabs.tabs("refresh")
-		configTabs.tabs("select", 0)
-		$("##{tabId}").append(b)
-		div
-
-	s.addAdvancedOption = (content) ->
-		selection = $("#newGameView").find(".featureSelectionPanel.featureSelectionPanelHiddenState")
-		selection.append(content)
-
-	s
-)(SDP.Graphical or {})
-
-###
-PATCHES
-###
-###
-Functions which require patches
-###
-SDP.GDT.addTraining = (item) ->
-	item = item.toInput() if SDP.GDT.Training? and item instanceof SDP.GDT.Training
-	item.pointsCost = 0 unless item.pointsCost?
-	if Checks.checkPropertiesPresent(item, ['id', 'name', 'pointsCost', 'duration', 'category', 'categoryDisplayName']) and Checks.checkUniqueness(item, 'id', Training.getAllTraining())
-		Training.moddedTraining(item)
-	return
-
-SDP.GDT.addPublisher = (item) ->
-	item = item.toInput() if SDP.GDT.Publisher? and item instanceof SDP.GDT.Publisher
-	return if not Checks.checkUniqueness(item, 'id', Companies.getAllCompanies())
-	if Checks.checkPropertiesPresent(item, ['id', 'name']) and Checks.checkUniqueness(item, 'id', ProjectContracts.getAllPublishers())
-		ProjectContracts.moddedPublishers.push(item)
-	return
-
-SDP.GDT.addContract = (item) ->
-	item = item.toInput() if SDP.GDT.Contract? and item instanceof SDP.GDT.Contract
-	if Checks.checkPropertiesPresent(item, ['name', 'description', 'dF', 'tF'])
-		ProjectContracts.moddedContracts.push(item)
-	return
-
-SDP.GDT.addReviewer = (item) ->
-	if item.constructor is String then item = {id: item.replace(/\s/g,""), name: item}
-	item = item.toInput() if SDP.GDT.Reviewer? and item instanceof SDP.GDT.Reviewer
-	if Checks.checkPropertiesPresent(item, ['id', 'name']) and Checks.checkUniqueness(item, 'id', Reviews.getAllReviewers())
-		Reviews.moddedReviewers.push(item)
-	return
-
-SDP.GDT.addReviewMessage = (item) ->
-	if item.constructor is String then item = {message: item, isRandom: true}
-	if item.message or item.getMessage
-		Reviews.moddedMessages.push(item)
-	return
-
-SDP.GDT.addApplicantFunctor = (item) ->
-	if Checks.checkPropertiesPresent(item, ['apply', 'forMale']) and typeof apply is "function"
-		JobApplicants.moddedAlgorithims.push(item)
-	return
-
-SDP.GDT.addFamousFunctor = (item) ->
-	if Checks.checkPropertiesPresent(item, ['apply', 'forMale']) and typeof apply is "function"
-		JobApplicants.moddedFamous.push(item)
-	return
-
-###
-#
-# Patches: improves game modularbility and performance and kills bugs
-# Should force patches on mod load
-#
-###
-SDP.GDT.Internal = {}
-SDP.GDT.Internal.notificationsToTrigger = []
-
-###
-Triggers all notifications in the situation they couldn't be triggered before (ie: before the GameManager.company.notification existed
-###
 GDT.on(GDT.eventKeys.saves.loaded, ->
-	GameManager.company.notifications.push(i) for i in SDP.GDT.Internal.notificationsToTrigger
-	SDP.GDT.Internal.notificationsToTrigger = [])
+	GameManager.company.notifications.push(i) for i in SDP.GDT.Notification.queue
+	SDP.GDT.Notification.queue = [])
 GDT.on(GDT.eventKeys.saves.newGame, ->
-	GameManager.company.notifications.push(i) for i in SDP.GDT.Internal.notificationsToTrigger
-	SDP.GDT.Internal.notificationsToTrigger = [])
-
-###
-Allows new platforms to incorporate different images based on the date
-###
-Platforms._oldGetPlatformImage = Platforms.getPlatformImage
-Platforms.getPlatformImage = (platform, week) ->
-	if platform.id is 'PC' then return Platforms._oldGetPlatformImage(platform, week)
-	if not platform.imageDates? or not platform.baseIconUri? then return platform.iconUri
-	baseUri = platform.baseIconUri
-	image = null
-	if week and platform.imageDates.constructor is Array
-		image = "{0}/{1}-{2}.png".format(baseUri, platform.id, String(i+1)) for date, i in platform.imageDates when General.getWeekFromDateString(date) <= week and i isnt 0
-	image = "{0}/{1}.png".format(baseUri, platform.id) unless image?
-	return image
-###
-Forces getAllTraining to include modded training
-###
-Training._oldGetAllTraining = Training.getAllTraining
-Training.moddedTraining = []
-Training.getAllTraining = ->
-	trainings = Training._oldGetAllTraining()
-	for modT in Training.moddedTraining when modT.id? and modT.isTraining # provide more expected behavior
-		trainings.push(modT)
-	return
-
-###
-Adds features to the publisher contracts which determine how they act
-Also allows low chance for platform company to randomly give a publisher contract
-###
-ProjectContracts.createPublisher = (item, id) ->
-	if item.constructor is String then item = {name: item}
-	if id? then item.id = id
-	if not item.id? and item.name? then item.id = name.replace(/\s/g,"")
-	item
-ProjectContracts.vanillaPublishers = [
-	ProjectContracts.createPublisher("Active Visionaries")
-	ProjectContracts.createPublisher("Electronic Mass Productions", "ea")
-	ProjectContracts.createPublisher("Rockville Softworks")
-	ProjectContracts.createPublisher("Blue Bit Games")
-	ProjectContracts.createPublisher("CapeCom")
-	ProjectContracts.createPublisher("Codemeisters")
-	ProjectContracts.createPublisher("Deep Platinum")
-	ProjectContracts.createPublisher("Infro Games")
-	ProjectContracts.createPublisher("LoWood Productions")
-	ProjectContracts.createPublisher("TGQ")
-	ProjectContracts.createPublisher("\u00dcberSoft")
-]
-ProjectContracts.moddedPublishers = []
-ProjectContracts.publisherContracts.__oldGetContract = ProjectContracts.publisherContracts.getContract
-ProjectContracts.getAllPublishers = ->
-	results = ProjectContracts.vanillaPublishers.filter (val) -> val.id?
-	results.push(ProjectContracts.moddedPublishers.filter (val) -> val.id?)
-	results
-ProjectContracts.getAvailablePublishers = (company) ->
-	week = Math.floor(company.currentWeek)
-	ProjectContracts.getAllPublishers().filter((val) ->
-		return (not val.startWeek? or week > General.getWeekFromDateString(val.startWeek, val.ignoreGameLengthModifier)) and (not val.retireWeek? or val.retireWeek is '260/12/4' or week < General.getWeekFromDateString(val.retireWeek, val.ignoreGameLengthModifier))
-	)
-ProjectContracts.getPublishingCompanies = (company) ->
-	c = Companies.getAllCompanies(company).filter (val) -> val.notPublisher? and not val.notPublisher
-	c.forEach (val) -> val.isCompany = true
-	c
-
-SDP.GDT.Internal.getGenericContractsSettings = (company, type) ->
-	key = "contracts#{type}"
-	settings = company.flags[key]
-	if not settings
-		settings = {id: key}
-		company.flags[key] = settings
-	settings
-
-SDP.GDT.Internal.generatePublisherContracts = (company, settings, maxNumber) ->
-	contracts = []
-	seed = settings.seed
-	random = new MersenneTwister(SDP.Util.getSeed(settings))
-	if settings.seed isnt seed
-		settings.topic = undefined
-		settings.researchedTopics = undefined
-		settings.excludes = undefined
-		settings.platforms = undefined
-	if not settings.topics or not settings.researchedTopics or not settings.platforms
-		topics = company.topics.slice()
-		topics.addRange(General.getTopicsAvailableForResearch(company))
-		settings.topics = topics.map (t) -> t.id
-		researchedTopics = company.topics.map (t) -> t.id
-		settings.researchedTopics = researchedTopics
-		platforms = Platforms.getPlatformsOnMarket(company).filter (p) -> not p.isCustom and Platforms.doesPlatformSupportGameSize(p, "medium")
-		settings.platforms = platforms.map (p) -> p.id
-		settings.excludes = []
-		lastGame = company.gameLog.last()
-		settings.excludes.push {genre: lastGame.genre.id, topic: lastGame.topic.id} if lastGame
-	else
-		topics = settings.topics.map (id) -> Topics.topics.first (t) -> t.id is id
-		researchedTopics = settings.researchedTopics.map (id) -> Topics.topics.first (t) -> t.id is id
-		allPlatforms = Platforms.getPlatforms(company, true)
-		platforms = settings.platforms.map (id) -> allPlatforms.first (p) -> p.id is id
-	excludes = settings.excludes.slice()
-	count = SDP.Util.getRandomInt(random, maxNumber)
-	count = Math.max(1, count) if settings.intialSettings
-	sizes = ["medium"]
-	sizes.push("large","large","large") if company.canDevelopLargeGames()
-	audiences = SDP.Enum.Audience.toArray()
-	publishers = ProjectContracts.getAvailablePublishers(company)
-	publishers.push(ProjectContracts.getPublishingCompanies(company))
-	sizeBasePay = { medium:15e4, large:15e5/2 }
-	for i in [0...count]
-		if platform and (platform.company and random.random() <= 0.2)
-			publisher = publishers.find((val) -> val.toString() is platform.company)
-		else if random.random() <= 0.1
-			publisher = publishers.pickRandom(random) # Adds a low chance for random platform company contracts
-		else publisher = publishers.filter((val) -> not val.isCompany?()).pickRandom(random)
-		diffculty = 0
-		genre = undefined
-		topic = undefined
-		if random.random() <= 0.7
-			genre = if publisher.getGenre? then publisher.getGenre(random) else General.getAvailableGenres(company).pickRandom(random)
-			diffculty += 0.1
-		if random.random() <= 0.7
-			loop
-				if random.random() <= 0.7
-					topic = if publisher.getTopic? then publisher.getTopic(random, topics.except(researchedTopics)) else topics.except(researchedTopics).pickRandom(random)
-				else
-					topic = if publisher.getTopic? then publisher.getTopic(random, topics) else topics.pickRandom(random)
-				break if topic?
-				break unless excludes.some (e) -> (not genre? or e.genre is genre.id) and e.topic is topic.id
-			difficulty += 0.1 if topic?
-		excludes.push({genre: genre?.id, topic: topic?.id}) if genre or topic
-		platform = undefined
-		if random.random() <= 0.7
-			platform = if publisher.getPlatform? then publisher.getPlatform(random, platforms) else platform = platforms.pickRandom(random)
-		audience = undefined
-		if company.canSetTargetAudience() and random.random() <= 0.2
-			audience = if publisher.getAudience? then publisher.getAudience(random) else audience = audiences.pickRandom(random)
-		diffculty += 0.8 * random.random()
-		minScore = 4 + Math.floor(5 * diffculty)
-		loop
-			size = sizes.pickRandom(random)
-			break unless platform? and not Platforms.doesPlatformSupportGameSize(platform, size)
-		basePay = sizeBasePay[size]
-		pay = basePay * (minScore/10)
-		pay /= 5e3
-		pay = Math.max(1, Math.floor(pay)) * 5e3
-		penalty = pay * 1.2 + pay * 1.8 * random.random()
-		penalty /= 5e3
-		penalty = Math.floor(penalty) * 5e3
-		royaltyRate = Math.floor(7 + 8 * difficulty) / 100
-		name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
-		if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
-			pubName = if publisher.getName? then publisher.getName() else publisher.toString()
-			contracts.push {
-				id: "publisherContracts"
-				refNumber: Math.floor(Math.random() * 65535)
-				type: "gameContract"
-				name: name
-				description: "Publisher: {0}".localize().format(pubName)
-				publisher: pubName
-				topic: if topic then topic.id else topic
-				genre: if genre then genre.id else genre
-				platform: if platform then platform.id else undefined
-				gameSize: size
-				gameAudience: audience
-				minScore: minScore
-				payment: pay
-				penalty: penalty
-				royaltyRate: royaltyRate
-			}
-		else count++
-	contracts
-
-ProjectContracts.publisherContracts.getContract = (company) ->
-	SDP.GDT.Internal.generatePublisherContracts(company, SDP.GDT.Internal.getGenericContractsSettings(company, "publisher"), 5).filter (c) -> not c.skip
-
-###
-Allows adding of standard contract work
-###
-ProjectContracts.moddedContracts = []
-ProjectContracts.getAvailableModContractsOf = (company, size) ->
-	contracts = []
-	for c in ProjectContracts.moddedContracts when not c.isAvailable? or (c.isAvailable? and c.isAvailable(company))
-		contracts.push(c) if c.size is size
-	contracts
-
-ProjectContracts.genericContracts.__oldGetContract = ProjectContracts.genericContracts.getContract
-ProjectContracts.genericContracts.getContract = (company) ->
-	settings = SDP.GDT.Internal.getGenericContractsSettings(company, "small")
-	seed = SDP.Util.getSeed(settings)
-	random = new MersenneTwister(seed)
-	genCon = SDP.GDT.Internal.generateContracts
-	resultContracts = []
-	contracts = ProjectContracts.genericContracts.__oldGetContract(company)
-	contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "small"), 4)
-	if company.flags.mediumContractsEnabled
-		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "medium")
-		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "medium"), 3)
-	if company.flags.largeContractsEnabled
-		settings = SDP.GDT.Internal.getGenericContractsSettings(company, "large")
-		contracts.addRange genCon(company, settings, ProjectContracts.getAvailableModContractsOf(company, "large"), 2)
-	return contracts.shuffle(random).filter (c) -> not c.skip
-
-SDP.GDT.Internal.generateContracts = (company, settings, sourceSet, size, maxNumber) ->
-	seed = SDP.Util.getSeed(settings)
-	random = new MersenneTwister(seed)
-	contracts = []
-	set = sourceSet.slice()
-	count = SDP.Util.getRandomInt(random, maxNumber)
-	count = Math.max(1, count) if settings.intialSettings
-	for i in [0...count] when set.length > 0
-		item = set.pickRandom(random)
-		set.remove(item)
-		contract = SDP.GDT.Internal.generateSpecificContract(company, item, size, random)
-		contract.id = "genericContracts"
-		contract.index = i
-		contract.skip = true if settings.contractsDone and settings.contractsDone.indexOf(i) isnt -1
-		contracts.push(contract)
-	contracts
-
-SDP.GDT.Internal.generateSpecificContract = (company, template, size, random) ->
-	r = random.random()
-	r += random.random() if random.random() > 0.8
-	minPoints = 11
-	minPoints = 30 if size is "medium"
-	minPoints = 100 if size is "large"
-	minPoints += 6 if minPoints is 12 and company.staff.length > 2
-	factor = company.getCurrentDate().year / 25
-	minPoints += minPoints * factor
-	points = minPoints + minPoints * r
-	pointPart = points / (template.dF + template.tF)
-	d = pointPart * template.dF
-	t = pointPart * template.tF
-	d += d * 0.2 * random.random() * random.randomSign()
-	t += t * 0.2 * random.random() * random.randomSign()
-	d = Math.floor(d)
-	t = Math.floor(t)
-	pay = points * 1e3
-	pay /= 1e3
-	pay = Math.floor(pay) * 1e3
-	weeks = Math.floor(3 + 7 * random.random())
-	weeks = Math.floor(3 + 3 * random.random()) if size is "small"
-	penalty = pay * 0.2 + pay * 0.3 * random.random()
-	penalty /= 1e3
-	penalty = Math.floor(penalty) * 1e3
-	return {
-		name : template.name,
-		description : template.description
-		requiredD : d
-		requiredT : t
-		spawnedD : 0
-		spawnedT : 0
-		payment : pay
-		penalty : -penalty
-		weeksToFinish : weeks
-		rF : template.rF
-		isGeneric : true
-		size : size
-	}
-
-###
-Allows adding reviewer names to the reviewer list along with existing and retire dates
-Allows adding review messages
-###
-Reviews.moddedReviewers = []
-Reviews.moddedMessages = []
-Reviews.vanillaReviewers = [
-	{id: 'StarGames', name: 'Star Games'}
-	{id: 'InformedGamer', name: 'Informed Game'}
-	{id: 'GameHero', name: 'Game Hero'}
-	{id: 'AllGames', name: 'All Games'}
-]
-Reviews.getAllReviewers = ->
-	result = Reviews.vanillaReviewers.slice()
-	result.addRange(Reviews.moddedReviewers.slice())
-	result
-
-Reviews.getAvailableReviewers = (company) ->
-	week = Math.floor(company.currentWeek)
-	Reviews.getAllReviewers().filter((val) ->
-		return (not val.startWeek? or week > General.getWeekFromDateString(val.startWeek, val.ignoreGameLengthModifier)) and (not val.retireWeek? or week < General.getWeekFromDateString(val.retireWeek, val.ignoreGameLengthModifier))
-	)
-
-Reviews.getFourRandomReviewers = (company) ->
-	reviews = Reviews.getAvailableReviewers(company)
-	if reviews.length < 4 then throw "Reviewers are missing"
-	if reviews.length is 4 then return [reviews[0],reviews[1],reviews[2], reviews[3]]
-	random = company._mersenneTwister
-	first = reviews.pickRandom(random)
-	reviews = reviews.except(first)
-	second = reviews.pickRandom(random)
-	reviews = reviews.except(second)
-	third = reviews.pickRandom(random)
-	reviews = reviews.except(third)
-	forth = reviews.pickRandom(random)
-	company.randomCalled += 4
-	[first, second, third, forth]
-
-Reviews.getModdedPositiveMessages = (game, score) ->
-	result = []
-	for m in Reviews.moddedMessages when m.isPositive and not m.isNegative
-		if m.getMessage?
-			result.push(m.getMessage(game, score))
-		else if m.message? then result.push(m.message)
-	result
-
-Reviews.getModdedNegativeMessages = (game, score) ->
-	result = []
-	for m in Reviews.moddedMessages when m.isNegative and not m.isPositive
-		if m.getMessage?
-			result.push(m.getMessage(game, score))
-		else if m.message? then result.push(m.message)
-	result
-
-Reviews.getModdedGenericMessages = (game, score) ->
-	result = []
-	for m in Reviews.moddedMessages when not m.isNegative and not m.isPositive
-		if m.getMessage?
-			result.push(m.getMessage(game, score))
-		else if m.message? then result.push(m.message)
-	result
-
-Reviews.__oldGetGenericReviewMessage = Reviews.getGenericReviewMessage
-Reviews.getGenericReviewMessage = (game, score) ->
-	if game.company.getRandom() <= 0.5 then Reviews.getModdedGenericMessages(game, score) else Reviews.__oldGetGenericReviewMessage(game, score)
-
-Reviews.getReviews = (game, finalScore, positiveMessages, negativeMessages) ->
-	intScore = Math.floor(finalScore).clamp(1, 10)
-	if finalScore >= 9.5
-		intScore = 10
-	reviewers = Reviews.getFourRandomReviewers(game.company)
-	reviews = []
-	usedMessages = []
-	scores = []
-	variation = 1
-	positiveMessages.addRange(Reviews.getModdedPositiveMessages(game))
-	negativeMessages.addRange(Reviews.getModdedNegativeMessages (game))
-	for i in [0...4]
-		if intScore is 5 or intScore is 6
-			variation = if game.company.getRandom() < 0.05 then 2 else 1
-		scoreVariation = if Math.randomSign() is 1 then 0 else variation * Math.randomSign()
-		score = (intScore + scoreVariation).clamp(1, 10)
-		if score is 10 and (scores.length is 3 and scores.average() is 10)
-			if not game.flags.psEnabled
-				if Math.floor(finalScore) < 10 or game.company.getRandom() < 0.8
-					score--
-			else if Math.floor(finalScore) is 10 and game.company.getRandom() < 0.4
-				score++
-		message = undefined
-		loop
-			if game.company.getRandom() <= 0.2
-				if scoreVariation >= 0 and (score > 2 and positiveMessages.length isnt 0)
-					message = positiveMessages.pickRandom()
-				else
-					if (scoreVariation < 0 and (score < 6 and negativeMessages.length isnt 0))
-						message = negativeMessages.pickRandom()
-			else
-				message = undefined
-			if not message
-				message = Reviews.getGenericReviewMessage(game, score)
-		break unless usedMessages.weakIndexOf(message) isnt -1
-		usedMessages.push(message)
-		scores.push(score)
-		reviews.push {
-			score : score
-			message : message
-			reviewerName : reviewers[i].name
-		}
-	return reviews
+	GameManager.company.notifications.push(i) for i in SDP.GDT.Notification.queue
+	SDP.GDT.Notification.queue = [])
 
 ###
 Modifies GDT classes to make all objects indepedent of GameManager.company
@@ -2824,7 +2267,7 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 
 ###
 Allow adding famous people and adding custom applicant algorithims
-###
+
 JobApplicants.moddedFamous = []
 JobApplicants.moddedAlgorithims = []
 JobApplicants.getRandomMale = (random) ->
@@ -2959,540 +2402,4 @@ UI._generateJobApplicants = ->
 			applicants.push(a)
 			oldApplicants.remove(a)
 	return applicants
-
 ###
-WEIGHT
-###
-class SDP.GDT.Weight
-	MIN_VAL = 0
-	MAX_VAL = 1
-
-	constructor: (val1 = 0.8, val2 = val1, val3 = val2, val4, val5 = val4, val6 = val5) ->
-		@isGenre = -> if val4? then true else false
-		val1 = val1.clamp(MIN_VAL,MAX_VAL)
-		val2 = val2.clamp(MIN_VAL,MAX_VAL)
-		val3 = val3.clamp(MIN_VAL,MAX_VAL)
-		arr = [val1, val2, val3]
-		if @isGenre()
-			val4 = val4.clamp(MIN_VAL,MAX_VAL)
-			val5 = val5.clamp(MIN_VAL,MAX_VAL)
-			val6 = val6.clamp(MIN_VAL,MAX_VAL)
-			arr.push(val4, val5, val6)
-		@get = -> arr
-
-	isAudience: () => not @isGenre()
-
-	toAudience: () =>
-		if @isAudience() then return this
-		a = @get()
-		new Weight(a[0],a[1],a[2])
-
-	toGenre: () =>
-		if @isGenre then return this
-		a = @get()
-		new Weight(a[0], a[1], a[2], 0.8)
-
-	@Default: (forGenre = true) ->
-		return new Weight(0.8,0.8,0.8,0.8) if forGenre
-		new Weight(0.8)
-
-###
-CONTRACTS
-###
-class SDP.GDT.Contract
-
-	constructor: (args...) ->
-		if args.length is 1
-			obj = args[0]
-			@isAvailable = obj.isAvailable
-			@isAvailable.bind(this) if @isAvailable?
-			if obj instanceof Contract
-				@setDescription(obj.description)
-				@setDesign(obj.designFactor)
-				@setTech(obj.techFactor)
-				@setResearch(obj.researchFactor)
-			else
-				@setDescription(obj.description)
-				@setDesign(obj.dF)
-				@setTech(obj.tF)
-				@setResearch(obj.rF)
-		else
-			@researchFactor = undefined
-			@isAvailable = undefined
-			@setDescription(args[3])
-			name = args[0]
-			@getName = -> name
-			@setDesign(args[1])
-			@setTech(args[2])
-
-	setDescription: (description) =>
-		if description.constructor is String then @description = description
-		else if description.constructor is [].constructor and description[0].constructor is String then @description = description.join(" ")
-
-	setDesign: (factor) ->
-		if factor.constructor is Number then @designFactor = factor
-		else if factor.constructor is [].constructor then @designFactor = factor.sum()
-
-	setTech: (factor) ->
-		if factor.constructor is Number then @techFactor = factor
-		else if factor.constructor is [].constructor then @techFactor = factor.sum()
-
-	setResearch: (factor) ->
-		if factor.constructor is Number then @researchFactor = factor
-		else if factor.constructor is [].constructor then @researchFactor = factor.sum()
-
-###
-EVENT
-###
-SDP.GDT.__notUniqueEvent = (id) ->
-	item = {id: id}
-	not Checks.checkUniqueness(item, 'id', DecisionNotifications.modNotifications)
-
-class SDP.GDT.Event
-
-	constructor: (id, @date, @isRandomEvent,  @ignoreLenMod) ->
-		unless id? then throw new TypeError("id can't be undefined")
-		if id instanceof Event
-			e = id
-			id = e.getId()
-			@getId = -> id
-			@date = new SDP.GDT.Date(e.date) if e.date?
-			@isRandomEvent = e.isRandomEvent
-			@ignoreLenMod = e.ignoreLenMod
-			@maxTriggers = e.maxTriggers
-			@trigger = e.trigger?.bind(this)
-			@complete = e.complete?.bind(this)
-			@getNotification = e.getNotification
-		else if id.id?
-			e = id
-			id = e.id
-			@getId = -> id
-			@date = e.date
-			@isRandomEvent = e.isRandomEvent
-			@ignoreLenMod = e.ignoreGameLengthModifier
-			@maxTriggers = e.maxTriggers
-			@trigger = e.trigger
-			@complete = e.complete
-			@getNotification = unless e.notification? then e.getNotification else ((company) -> e.notification)
-		else
-			@maxTriggers = 1
-			@trigger = (company) -> false
-			@complete = (decision) -> return
-			@getNotification = (company) -> new SDP.GDT.Notification(this)
-			@getId = -> id
-		@getNotification.bind(this)
-		id += '_' while SDP.GDT.__notUniqueEvent(id)
-		@getId = -> id
-
-	toInput: =>
-		return {
-			id: @getId()
-			date: @date unless @date instanceof SDP.GDT.Date then @date.toString()
-			isRandomEvent: @isRandomEvent
-			ignoreGameLengthModifier: @ignoreLenMod
-			maxTriggers: @maxTriggers
-			trigger: @trigger
-			getNotification: @getNotification
-			complete: @complete
-		}
-
-	add: =>
-		GDT.addEvent(@)
-
-###
-NOTIFICATION
-###
-__notificationRep = Notification
-
-class SDP.GDT.Notification
-
-	constructor: (args...) ->
-		if args.length is 1
-			obj = args[0]
-			if obj instanceof __notificationRep
-				@header = obj.header
-				@text = obj.text
-				@buttonTxt = obj.buttonText
-				@weeksUntilFire = obj.weeksUntilFire
-				@image = obj.image
-				@options = obj.options.slice()
-				id = obj.sourceId
-			else if obj instanceof Notification
-				@header = obj.header
-				@text = obj.text
-				@buttonTxt = obj.buttonText
-				@weeksUntilFire = obj.weeksUntilFire
-				@image = obj.image
-				@options = obj.options.slice()
-				id = obj.getSourceId()
-				event = obj.getEvent()
-		else
-			if args[0].constructor is String
-				@header = args[0]
-				@text = args[1]
-				@buttonText = args[2]
-				@weeksUntilFire = args[3]
-				@image = args[4]
-				event = args[5]
-			else
-				event = args[0]
-				@header = args[1]
-				@text = args[2]
-				@buttonText = args[3]
-				@weeksUntilFire = args[4]
-				@image = args[5]
-			id = if SDP.GDT.Event? and event instanceof SDP.GDT.Event then event.getId() else if event.id? then event.id else 0
-			@options = []
-		@sourceId = -> id
-		@getEvent = (-> event) if event?
-
-	addOption: (text) =>
-		@options.push(text.localize("decision action button")) if @options.length < 3
-		this
-
-	addOptions: (txts...) =>
-		if txts.length + @options.length < 3 then @options.push(txts) else
-			index = 0
-			@options.push(txts[index++].localize("decision action button")) while @options.length < 3
-		this
-
-	removeOption: (index) =>
-		@options.splice(index, 1)
-		this
-
-	toInput: =>
-		return new __notificationRep {
-			header: @header
-			text: @text
-			buttonText: @buttonText
-			weeksUntilFire: @weeksUntilFire
-			image: @image
-			options: @options
-			sourceId: @sourceId
-			event: @getEvent()
-		}
-
-	addAsEvent: =>
-		SDP.GDT.addEvent(@) if @getEvent()?
-
-	trigger: =>
-		SDP.GDT.triggerNotification(@)
-
-###
-PLATFORM
-###
-SDP.GDT.__notUniquePlatform = (id) ->
-	item = {id: id}
-	not Checks.checkUniqueness(item, 'id', Platforms.allPlatforms)
-
-class SDP.GDT.Platform
-
-	events: []
-	marketPoints: []
-	genreWeight: Weight.Default()
-	audienceWeight: Weight.Default(false)
-
-	constructor: (name, id = name) ->
-		name = name.localize("game platform")
-		@getName = -> name
-		@company = null
-		@startAmount = 0
-		@unitsSold = 0
-		@licensePrice = 0
-		@publishDate = SDP.GDT.Date(1,1,1)
-		@retireDate = SDP.GDT.Date.Max()
-		@devCost = 0
-		@techLevel = 1
-		@iconUri = undefined
-		@baseIconUri = undefined
-		@imageDates = undefined
-		@getId = -> id
-
-	addEvent: (e) =>
-		@events.push(e) if e instanceof SDP.GDT.Event
-		this
-
-	removeEvent: (id) =>
-		index = @events.findIndex((val) -> val.id is id)
-		@events.splice(index, 1) if index isnt -1
-
-	addMarketPoint: (date, amount) =>
-		return unless date?
-		if date instanceof SDP.GDT.Date then date = date.toString()
-		else if date.week? and date.month? and date.year? then date = "{0}/{1}/{2}".format(date.year, date.month, date.week)
-		if typeof date isnt 'string' then return
-		@marketPoints.push {
-			'date': date
-			'amount': amount
-		} if date? and amount?
-		this
-
-	removeMarketDate: (date) =>
-		index = @marketPoints.findIndex((val) -> val.date is date)
-		@marketPoints.splice(index, 1) if index isnt -1
-
-	setWeight: (weight) =>
-		return if not SDP.GDT.Weight?
-		unless weight instanceof SDP.GDT.Weight then return
-		if weight.isGenre() then @genreWeight = weight else @audienceWeight = weight
-		this
-
-	getPrimEvents: ->
-		arr = []
-		arr.push(evt.toInput()) for evt in @events
-		arr
-
-	toInput: ->
-		id = @getId()
-		id += '_' while SDP.GDT.__notUniquePlatform(id)
-		@getId = -> id
-		return {
-			id: @getId()
-			name: @getName()
-			iconUri: @iconUri
-			imageDates: @imageDates
-			baseIconUri: @baseIconUri
-			company: if typeof @company.getName is "function" then @company.getName() else @company.toString()
-			startAmount: @startAmount
-			unitsSold: @unitsSold
-			marketKeyPoints: @marketPoints
-			licensePrice: @licensePrice
-			published: @publishDate
-			platformRetireDate: @retireDate
-			developmentCost: @devCost
-			genreWeightings: @genreWeight.toGenre().get()
-			audienceWeightings: @audienceWeight.toAudience().get()
-			techLevel: @techLevel
-			events: @getPrimEvents()
-		}
-
-###
-PUBLISHER
-###
-SDP.GDT.__notUniquePublisher = (id) ->
-	item = {id: id}
-	not Checks.checkUniqueness(item, 'id', ProjectContracts.getAllPublishers())
-
-class SDP.GDT.Publisher
-	topicOverride: []
-	platformOverride: []
-	genreWeightings: SDP.GDT.Weight.Default()
-	audWeightings: SDP.GDT.Weight.Default(false)
-
-	constructor: (name, id = name) ->
-		if SDP.GDT.Company? and name instanceof SDP.GDT.Company
-			@getCompany = -> name
-			id = name.getId()
-			name = name.getName()
-		else if name? and typeof name is 'object'
-			name.isPrimitive = true
-			@getCompany = -> name
-			id = name.id
-			name = name.name
-		name = name.localize("publisher")
-		@getId = -> id
-		@getName = -> name
-		@startWeek = undefined
-		@retireWeek = undefined
-
-	addTopicOverride: (id, weight) =>
-		@topicOverride.push {id: id, weight: weight.clamp(0,1)} if Topics.topics.findIndex((val) -> val.id is id) isnt -1
-
-	addPlatformOverride: (id, weight) =>
-		@platformOverride.push {id: id, weight: weight.clamp(0,1)} if Platforms.allPlatforms.findIndex((val) -> val.id is id) isnt -1
-
-	setWeight: (weight) =>
-		@genreWeightings = weight if weight.isGenre()
-		@audWeightings = weight if weight.isAudience()
-
-	toString: => @getName()
-
-	getAudience: (random) =>
-		auds = SDP.Enum.Audience.toArray()
-		auds.forEach (val, i, arr) -> arr.push(val, val)
-		for a in SDP.Enum.Audience.toArray()
-			v = Math.floor(General.getAudienceWeighting(@audWeightings.get(), a)*10)-8
-			continue if Math.abs(v) > 2
-			while v > 0
-				auds.push(a)
-				v--
-			while v < 0
-				auds.splice(auds.findIndex((val) -> val is a), 1)
-				v++
-		auds.pickRandom(random)
-
-	getGenre: (random) =>
-		defGenres = SDP.Enum.Genre.toArray()
-		genres = SDP.Enum.Genre.toArray()
-		genres.forEach (val, i, arr) -> arr.push(val, val)
-		for g in defGenres
-			v = Math.floor(General.getGenreWeighting(@genreWeightings.get(), g)*10)-8
-			continue if Math.abs(v) > 2
-			while v > 0
-				genres.push(g)
-				v--
-			while v < 0
-				genres.splice(genres.findIndex((val) -> val is g), 1)
-				v++
-		genres.pickRandom(random)
-
-	getPlatform: (random, defPlats) =>
-		defPlats = defPlats.filter (p) -> @platformOverride.findIndex((v) -> v.id is p.id) isnt -1
-		return unless defPlats
-		platforms = defPlats.splice()
-		platforms.forEach (val, i, arr) -> arr.push(val, val)
-		for p in defPlats
-			v = Math.floor(@platformOverride.find((val) -> val.id is p.id).weight*10)-8
-			continue if Math.abs(v) > 2
-			while v > 0
-				platforms.push(p)
-				v--
-			while v < 0
-				platforms.splice(platforms.findIndex((val) -> val is g), 1)
-				v++
-		platforms.pickRandom(random)
-
-	getTopic: (random, defTopics) =>
-		defTopics = defTopics.filter (t) -> @topicOverride.findIndex((v) -> v.id is t.id) isnt -1
-		return unless defPlats
-		topics = defTopics.map (val) -> val
-		topics.forEach (val, i, arr) -> arr.push(val, val)
-		for p in defTopics
-			v = Math.floor(@topicOverride.find((val) -> val.id is p.id).weight*10)-8
-			continue if Math.abs(v) > 2
-			while v > 0
-				topics.push(p)
-				v--
-			while v < 0
-				topics.splice(topics.findIndex((val) -> val is g), 1)
-				v++
-		topics.pickRandom(random)
-
-	toInput: =>
-		id = @getId()
-		id += '_' while SDP.GDT.__notUniquePlatform(id)
-		@getId = -> id
-		return {
-			id: @getId()
-			name: @getName()
-			isCompany: @getCompany()?
-			company: @getCompany()
-			getGenre: @getGenre
-			getAudience: @getAudience
-			getTopic: @getTopic
-			getPlatform: @getPlatform
-		}
-
-###
-RESEARCH
-###
-SDP.GDT.__notUniqueResearch = (id) ->
-	item = {id: id}
-	not Checks.checkUniqueness(item, 'id', Research.getAllItems())
-
-class SDP.GDT.Research
-
-	constructor: (name, id = name) ->
-		name = name.localize("research")
-		@getName = -> name
-		@canResearch = (company) -> true
-		@v = undefined
-		@category = SDP.Enum.ResearchCategory.ENGINE.value
-		@categoryDisplayName = @category.localize()
-		@pointsCost = 0
-		@duration = 0
-		@cost = 0
-		@enginePoints = 0
-		@engineCost = 0
-		@group = undefined
-		@canUse = (game) -> true
-		@complete = ->
-		@consolePart = false
-		@showXPGain = true
-		id += '_' while SDP.GDT.__notUniqueResearch(id)
-		@getId = -> id
-
-	toInput: =>
-		return {
-			id: @getId()
-			name: @getName()
-			canResearch: @canResearch
-			canUse: @canUse
-			v: @v
-			pointsCost: @pointsCost
-			duration: @duration
-			cost: @cost
-			enginePoints: @enginePoints
-			engineCost: @engineCost
-			category: @category
-			categoryDisplayName: @categoryDisplayName
-			group: @group
-			complete: @complete
-			consolePart: @consolePart
-			showXPGain: @showXPGain
-		}
-
-###
-TOPIC
-###
-SDP.GDT.__notUniqueTopic = (id) ->
-	item = {id: id}
-	not Checks.checkUniqueness(item, 'id', Topics.topics)
-
-class SDP.GDT.Topic
-
-	constructor: (name, id = name, @genreWeight = SDP.GDT.Weight.Default(), @audienceWeight = SDP.GDT.Weight.Default(false)) ->
-		name = name.localize("topic")
-		@getName = -> name
-		@missionOverride = []
-		for g in SDP.Enum.Genre.toArray()
-			cats = []
-			for c in SDP.Enum.ResearchCategory
-				cats.push(0)
-			@missionOverride.push(cats)
-		@getId = -> id
-
-	setOverride: (genreName, categoryName, value) =>
-		pos = if genreName.constructor is String and categoryName.constructor is String then SDP.GDT.getOverridePositions(genreName, categoryName) else [genreName, categoryName]
-		if 0 <= pos[0] <= @missionOverride.length and 0 <= pos[1] <= @missionOverride[pos[0]].length
-			@missionOverride[pos[0]][pos[1]] = value
-
-	toInput: =>
-		id = @getId()
-		id += '_' while SDP.GDT.__notUniqueTopic(id)
-		@getId = -> id
-		return {
-			id: @getId()
-			name: @getName()
-			genreWeightings: if @genreWeight instanceof SDP.GDT.Weight then @genreWeight.toGenre().get() else @genreWeight
-			audienceWeightings: if @audienceWeight instanceof SDP.GDT.Weight then @audienceWeight.toAudience().get() else @audienceWeight
-			missionOverrides: @missionOverride
-		}
-
-	add: =>
-		SDP.GDT.addTopic(@)
-
-###
-COMPANY
-###
-class SDP.GDT.Company
-
-	constructor: (name, id = name.replace(/\s/g,"")) ->
-		c = Companies.getAllCompanies().find (val) -> val.id is id
-		c = Companies.createCompany({name: name, id: id}) unless c?
-		@platforms = c.platforms
-		@addPlatform = c.addPlatform
-		@addPlatform.bind(@)
-		@sort = c.sort
-		@sort.bind(@)
-		name = c.name
-		@getName = -> name
-		id = c.id
-		@getId = -> id
-
-	getPlatform: (name) =>
-		p = @platforms.find((val) -> platform.name is name)
-		p = @platforms.find((val) -> platform.id is name) unless p?
-		p
-
-	toString: => @getName()
