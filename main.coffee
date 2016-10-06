@@ -12,8 +12,8 @@ All types can either contain the name of the types as found here or the vanilla 
 	@instruction('optional' if 'researchCost') @attribute [Integer] devCost The cost to develop with this research on in small scale
 	@attribute [Integer] engineCost The cost to put this into an engine
 	@defaults(pointsCost) @attribute [Integer] enginePoints The amount of points this will cost to put in an engine
-@attribute [String] category The SDP.Constants.ResearchCategory of the object
-@attribute [String] categoryDisplayName Similar to category except may also be
+@attribute [String] category May be SDP.Constants.ResearchCategory of the object, or maybe something else
+@attribute [String] categoryDisplayName Similar to category, human readable version
 @optional
 	@attribute [Integer] v A basic value to scale the research by
 	@attribute [String] group The group to assign this research to, prevents more then one group being selected on games
@@ -29,7 +29,7 @@ All types can either contain the name of the types as found here or the vanilla 
 @customType PlatformItem
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
-@attribute [CompanyItem] company The company this platform belongs to
+@attribute [String] company The company name this platform belongs to
 @attribute [Float] startAmount The starting amount of units sold on release (multiplied by 5000000)
 @attribute [Float] unitsSold The resulting units sold by the end (multiplied by 5000000)
 @attribute [Integer] licensePrice The one time license price to develop on the platform
@@ -71,6 +71,23 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] name The name of the item
 @attribute [Integer] pointsCost The cost in research points
 @attribute [Integer] duration How long it will take to complete the training
+@attribute [String] category The category of the object
+@attribute [String] categoryDisplayName Similar to category, human readable version
+@optional
+	@attribute [Integer] cost The cost in money
+	@attribute [Function(CharacterObject, CompanyItem)] canSee Determines whether the staff can see this training
+		@fparam [CharacterObject] staff The staff that should be able to see the training
+		@fparam [CompanyItem] company The company the training is taken place in
+		@freturn [Boolean] Whether the training can be seen
+	@attribute [Function(CharacterObject, CompanyItem)] canUse Determines whether the staff can use this training
+		@fparam [CharacterObject] staff The staff that should be able to use the training
+		@fparam [CompanyItem] company The company the training is taken place in
+		@freturn [Boolean] Whether the training can be used
+	@attribute [Function(CharacterObject, Integer)] tick Triggers every game tick this training is active
+		@fparam [CharacterObject] staff The staff that is performing the training
+		@fparam [Integer] delta The amount of milliseconds passed from the last tick
+	@attribute [Function(CharacterObject)] complete Triggers on training completion
+		@fparam [CharacterObject] staff The staff to complete the training
 ---
 @customType ContractItem
 @attribute [String] id The unique id of the item
@@ -94,8 +111,6 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] name The name of the item
 ---
 @customType ReviewerItem
-@attribute [String] id The unique id of the item
-@attribute [String] name The name of the item
 ---
 @customType NotificationItem
 @attribute [String] header The header of the notification
@@ -104,9 +119,23 @@ All types can either contain the name of the types as found here or the vanilla 
 	@attribute [String] buttonTxt The text for the button to display
 @instruction('optional' if 'buttonTxt')
 	@attribute [Array [1-3 String]] options A collection of possible button options to choose from
-@attribute [String] image The image uri for the notification
-@attribute [String] sourceId The id of the corresponding event object
-@attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+@optional
+	@attribute [String] image The image uri for the notification
+	@attribute [String] sourceId The id of the corresponding event object
+	@attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+---
+@customType EventItem
+@attribute [String] id The id of the event
+@attribute [Function(CompanyItem)] trigger Determines whether the event can trigger
+	@fparam [CompanyItem] company The company to test this trigger by
+@instruction('optional' if 'getNotification') @attribute [NotificationItem] notification The notification for this event (overrides getNotification)
+@instruction('optional' if 'notification') @attribute [Function(CompanyItem)] Retrieves a notification for this event
+	@fparam [CompanyItem] company The company to retrieve the notification for
+	@freturn [NotificationItem] The notification that was produced
+@optional
+	@attribute [Boolean] isRandomEvent Determines whether this event is random
+	@attribute [Function(Integer)] complete Determines what happens upon completion (this.runningCompany refers to the active company for this event)
+		@fparam [Integer] decision The decision chosen in the notification from 0 to 2
 ---
 @customType ContractCardItem
 @optional
@@ -1020,11 +1049,26 @@ SDP.Functional.addPublisherItem = (item) ->
 # Registers a Reviewer item
 #
 # @param [ReviewerItem] item The item to register
+###
 SDP.Functional.addReviewerItem = (item) ->
 	Checks = SDP.Util.Check
 	if Checks.propertiesPresent(item, ['id', 'name']) and Checks.uniqueness(item, 'id', SDP.GDT.Review.getAll())
 		SDP.GDT.Review.reviewer.push(item)
 	return
+###
+
+SDP.Functional.addEvent = (event) ->
+	Checks = SDP.Util.Check
+	unless Checks.propertiesPresent(event, ['id']) and (event.notification or event.getNotification) then return
+	unless Checks.checkUniqueness(event, 'id', GDT.Event.getAll()) then return
+
+	# hacks in runningCompany to events because event.complete does not supply one, and overriding the UI system is a bit much for now
+	oldTrigger = event.trigger
+	event.trigger = (company) ->
+		result = oldTrigger(company)
+		@runningCompany = company if result and event.complete?
+		result
+	GDT.Event.events.push(event)
 
 # Adds a notification to the triggering queue
 #
@@ -1185,17 +1229,72 @@ SDP.Class = (
 				cancel: if @cancel? then @cancel.bind(item) else undefined
 			}
 
-	class classes.Training
+	class classes.Training extends Base
+		constructor: (@name, @category, @categoryDisplayName = @category, @id) ->
+			super
+			@pointsCost ?= 0
+			@duration ?= 0
 
-	class classes.Contract
+		convert: ->
+			item = {
+				name: @name
+				id: @id
+				cost: @cost
+				pointsCost: @pointsCost
+				category: @category
+				categoryDisplayName: @categoryDisplayName
+				canSee: if @canSee? then @canSee.bind(item) else undefined
+				canUse: if @canUse? then @canUse.bind(item) else undefined
+				tick: if @tick? then @tick.bind(item) else undefined
+				complete: if @complete? then @complete.bind(item) else undefined
+			}
 
-	class classes.Publisher
+	class classes.Contract extends Base
+		constructor: (@name, @size, @description, @id) ->
+			super
+			@tF ?= 0
+			@dF ?= 0
+
+		convert:
+			item = {
+				name: @name
+				id: @id
+				size: @size
+				description: @description
+				tF: @tF
+				dF: @dF
+				card: @card
+				generateCard: if @generateCard? then @generateCard.bind(item) else undefined
+				rF: @rF
+			}
+
+	class classes.Publisher extends Base
+		constructor: (@name, @id) ->
+			super
+
+		convert: ->
+			item = {
+				name: @name
+				id: @id
+				card: @card
+				generateCard: if @generateCard? then @generateCard.bind(item) else undefined
+			}
+
+	class classes.Event extends Base
+		constructor: (@id, @isRandomEvent) ->
+			super
+			@trigger ?= (company) -> false
+
+		convert: ->
+			item = {
+				id: @id
+				isRandomEvent: @isRandomEvent
+				notification: @notification
+				trigger: @tigger.bind(item)
+				getNotification: if @getNotification? then @getNotification.bind(item) else undefined
+				complete: if @complete? then @complete.bind(item) else undefined
+			}
 )()
-
-SDP.GDT.addEvent = (item) ->
-	item = item.getEvent() if item.getEvent?
-	item = item.event if item.event?
-	GDT.addEvent(item)
 
 SDP.GDT = ( ->
 	GDT = {}
@@ -1214,7 +1313,6 @@ SDP.GDT = ( ->
 			company.availablePlatforms.concat(company.licencedPlatforms)
 		getByUid: (uid) -> GDT.Company.companes[uid]
 	}
-	GDT.Company.addCompany(GameManager.company)
 	Platforms.getPlatforms = GDT.Company.getPlatformsFor
 
 	oldResearchGetAll = Research.getAllItems
@@ -1337,7 +1435,7 @@ SDP.GDT = ( ->
 		getAvailable: (staff) ->
 			results = []
 			for t in GDT.Training.getAll()
-				results.push(t) if (t.canSee and t.can(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
+				results.push(t) if (t.canSee and t.canSee(staff, staff.company) or not t.canUse?) or (not t.canSee and t.canUse(staff, staff.company))
 			results
 		getById: (id) -> GDT.Training.getAll().first((t) -> t.id is id)
 	}
@@ -2117,9 +2215,48 @@ SDP.GDT = ( ->
 		GDT.Reviewer.reviewers.forEach((e, i) -> GDT.Reviewer.reviewers[i] = {name: e, id: e.replace(' ', '')})
 	)()
 
+	GDT.Event = {
+		events: DecisionNotifications.getAllNotificationsObjects()
+		getAll: -> GDT.Event.slice()
+		getAvailable: (company) ->
+			events = GDT.Event.getAll().filter((e) -> not e.isRandom and GDT.Event.isAvailable(e))
+		getRandom: (company) ->
+			spawnEvent = company.flags.nextRandomEvent and company.flags.nextRandomEvent <= GameManager.gameTime
+			unless company.flags.nextRandomEvent
+				company.flags.nextRandomEvent = (48 + 24 * company.getRandom()) * GameManager.SECONDS_PER_WEEK * 1e3
+			if spawnEvent
+				company.flags.nextRandomEvent = GameManager.gameTime + (36 + 48 * company.getRandom()) * GameManager.SECONDS_PER_WEEK * 1e3
+				candidates = GDT.Event.getAll().filter((e) ->
+					e.isRandomEvent and (company.flags.lastRandomEventId isnt e.id and GDT.Event.isAvailable(company, e))
+				)
+				event = candidates.pickRandom()
+				unless event then return []
+				company.flags.lastRandomEventId = event.id
+				return event
+			return []
+		trigger: (company, event) ->
+			unless company.eventTriggerCounts[event.id] then company.eventTriggerCounts[event.id] = 1
+			else company.eventTriggerCounts[event.id]++
+			return if event.notification then event.notification else event.getNotification(company)
+		isAvailable: (company, event) ->
+			if event.date
+				return false if Math.floor(company.currentWeek) < General.getWeekFromDateString(event.date, event.ignoreGameLengthModifier)
+			if event.maxTriggers or event.date
+				count = GameManager.company.eventTriggerCounts[event.id]
+				return false if count and count >= (if event.date then 1 else event.maxTriggers)
+			event.date or event.trigger and event.trigger(company)
+		getById: (id) -> GDT.Event.getAll().first((e) -> e.id is id )
+	}
+
 	GDT.Notification = {
 		queue: []
+		getNotification: (company, event) -> if event.notification then event.notification else event.getNotification(company)
+		getNewNotifications: (company) ->
+			results = GDT.Event.getAvailable(company).map((e) -> GDT.Event.trigger(company, e))
+			if results.length is 0 then results = [GDT.Event.trigger(company, GDT.Event.getRandom(company))]
+			results
 	}
+	DecisionNotifications.getNewNotifications = GDT.Notification.getNewNotifications
 
 	GDT.ModSupport = ( ->
 		ModSupport = {}
@@ -2240,8 +2377,9 @@ GDT.on(GDT.eventKeys.saves.newGame, ->
 Modifies GDT classes to make all objects indepedent of GameManager.company
 ###
 ( ->
-	oldGame = Game::
+
 	oldGameConst = Game
+	oldGame = oldGameConst::
 	Game = (company) ->
 		oldGameConst.call(@, company)
 		@company = company
@@ -2251,11 +2389,12 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 )()
 
 ( ->
-	oldChar = Character::
+
 	oldCharConst = Character
-	Character = (options) ->
-		oldCharConst.call(@, options)
-		@company = options.company or SDP.GDT.Company.getAllCompanies()[options.uid] or SDP.GDT.Company.getClientCompany()
+	oldChar = oldCharConst::
+	Character = (args...) ->
+		oldCharConst.call(@, args)
+		@company = args[0].company or SDP.GDT.Company.getAllCompanies()[args[0].uid] or SDP.GDT.Company.getClientCompany()
 		return
 
 	Character:: = oldChar
@@ -2263,6 +2402,17 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 	oldSave = Character::save
 	Character::save = ->
 		oldSave.call(@).companyId = @company.uid
+)()
+
+( ->
+	oldCompanyConst = Company
+	oldCompany = oldCompanyConst::
+	Company = (args...) ->
+		oldCompanyConst.call(@, args)
+		SDP.GDT.Company.addCompany(@)
+		return
+
+	Company:: = oldCompany
 )()
 
 ###

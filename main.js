@@ -14,8 +14,8 @@ All types can either contain the name of the types as found here or the vanilla 
 	@instruction('optional' if 'researchCost') @attribute [Integer] devCost The cost to develop with this research on in small scale
 	@attribute [Integer] engineCost The cost to put this into an engine
 	@defaults(pointsCost) @attribute [Integer] enginePoints The amount of points this will cost to put in an engine
-@attribute [String] category The SDP.Constants.ResearchCategory of the object
-@attribute [String] categoryDisplayName Similar to category except may also be
+@attribute [String] category May be SDP.Constants.ResearchCategory of the object, or maybe something else
+@attribute [String] categoryDisplayName Similar to category, human readable version
 @optional
 	@attribute [Integer] v A basic value to scale the research by
 	@attribute [String] group The group to assign this research to, prevents more then one group being selected on games
@@ -31,7 +31,7 @@ All types can either contain the name of the types as found here or the vanilla 
 @customType PlatformItem
 @attribute [String] id The unique id of the item
 @attribute [String] name The name of the item
-@attribute [CompanyItem] company The company this platform belongs to
+@attribute [String] company The company name this platform belongs to
 @attribute [Float] startAmount The starting amount of units sold on release (multiplied by 5000000)
 @attribute [Float] unitsSold The resulting units sold by the end (multiplied by 5000000)
 @attribute [Integer] licensePrice The one time license price to develop on the platform
@@ -73,6 +73,23 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] name The name of the item
 @attribute [Integer] pointsCost The cost in research points
 @attribute [Integer] duration How long it will take to complete the training
+@attribute [String] category The category of the object
+@attribute [String] categoryDisplayName Similar to category, human readable version
+@optional
+	@attribute [Integer] cost The cost in money
+	@attribute [Function(CharacterObject, CompanyItem)] canSee Determines whether the staff can see this training
+		@fparam [CharacterObject] staff The staff that should be able to see the training
+		@fparam [CompanyItem] company The company the training is taken place in
+		@freturn [Boolean] Whether the training can be seen
+	@attribute [Function(CharacterObject, CompanyItem)] canUse Determines whether the staff can use this training
+		@fparam [CharacterObject] staff The staff that should be able to use the training
+		@fparam [CompanyItem] company The company the training is taken place in
+		@freturn [Boolean] Whether the training can be used
+	@attribute [Function(CharacterObject, Integer)] tick Triggers every game tick this training is active
+		@fparam [CharacterObject] staff The staff that is performing the training
+		@fparam [Integer] delta The amount of milliseconds passed from the last tick
+	@attribute [Function(CharacterObject)] complete Triggers on training completion
+		@fparam [CharacterObject] staff The staff to complete the training
 ---
 @customType ContractItem
 @attribute [String] id The unique id of the item
@@ -96,8 +113,6 @@ All types can either contain the name of the types as found here or the vanilla 
 @attribute [String] name The name of the item
 ---
 @customType ReviewerItem
-@attribute [String] id The unique id of the item
-@attribute [String] name The name of the item
 ---
 @customType NotificationItem
 @attribute [String] header The header of the notification
@@ -106,9 +121,23 @@ All types can either contain the name of the types as found here or the vanilla 
 	@attribute [String] buttonTxt The text for the button to display
 @instruction('optional' if 'buttonTxt')
 	@attribute [Array [1-3 String]] options A collection of possible button options to choose from
-@attribute [String] image The image uri for the notification
-@attribute [String] sourceId The id of the corresponding event object
-@attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+@optional
+	@attribute [String] image The image uri for the notification
+	@attribute [String] sourceId The id of the corresponding event object
+	@attribute [Integer] weeksUntilFire The amount of weeks that must pass before this notification is fired
+---
+@customType EventItem
+@attribute [String] id The id of the event
+@attribute [Function(CompanyItem)] trigger Determines whether the event can trigger
+	@fparam [CompanyItem] company The company to test this trigger by
+@instruction('optional' if 'getNotification') @attribute [NotificationItem] notification The notification for this event (overrides getNotification)
+@instruction('optional' if 'notification') @attribute [Function(CompanyItem)] Retrieves a notification for this event
+	@fparam [CompanyItem] company The company to retrieve the notification for
+	@freturn [NotificationItem] The notification that was produced
+@optional
+	@attribute [Boolean] isRandomEvent Determines whether this event is random
+	@attribute [Function(Integer)] complete Determines what happens upon completion (this.runningCompany refers to the active company for this event)
+		@fparam [Integer] decision The decision chosen in the notification from 0 to 2
 ---
 @customType ContractCardItem
 @optional
@@ -1539,12 +1568,34 @@ SDP.Functional.addPublisherItem = function(item) {
   }
 };
 
-SDP.Functional.addReviewerItem = function(item) {
-  var Checks;
+
+/*
+SDP.Functional.addReviewerItem = (item) ->
+	Checks = SDP.Util.Check
+	if Checks.propertiesPresent(item, ['id', 'name']) and Checks.uniqueness(item, 'id', SDP.GDT.Review.getAll())
+		SDP.GDT.Review.reviewer.push(item)
+	return
+ */
+
+SDP.Functional.addEvent = function(event) {
+  var Checks, oldTrigger;
   Checks = SDP.Util.Check;
-  if (Checks.propertiesPresent(item, ['id', 'name']) && Checks.uniqueness(item, 'id', SDP.GDT.Review.getAll())) {
-    SDP.GDT.Review.reviewer.push(item);
+  if (!(Checks.propertiesPresent(event, ['id']) && (event.notification || event.getNotification))) {
+    return;
   }
+  if (!Checks.checkUniqueness(event, 'id', GDT.Event.getAll())) {
+    return;
+  }
+  oldTrigger = event.trigger;
+  event.trigger = function(company) {
+    var result;
+    result = oldTrigger(company);
+    if (result && (event.complete != null)) {
+      this.runningCompany = company;
+    }
+    return result;
+  };
+  return GDT.Event.events.push(event);
 };
 
 SDP.Functional.addNotificationToQueue = function(item) {
@@ -1827,32 +1878,124 @@ SDP.Class = (classes = {}, convertClasses = function(classObj) {
 
   return ResearchProject;
 
-})(Base), classes.Training = (function() {
-  function Training() {}
+})(Base), classes.Training = (function(superClass) {
+  extend(Training, superClass);
+
+  function Training(name1, category1, categoryDisplayName, id1) {
+    this.name = name1;
+    this.category = category1;
+    this.categoryDisplayName = categoryDisplayName != null ? categoryDisplayName : this.category;
+    this.id = id1;
+    Training.__super__.constructor.apply(this, arguments);
+    if (this.pointsCost == null) {
+      this.pointsCost = 0;
+    }
+    if (this.duration == null) {
+      this.duration = 0;
+    }
+  }
+
+  Training.prototype.convert = function() {
+    var item;
+    return item = {
+      name: this.name,
+      id: this.id,
+      cost: this.cost,
+      pointsCost: this.pointsCost,
+      category: this.category,
+      categoryDisplayName: this.categoryDisplayName,
+      canSee: this.canSee != null ? this.canSee.bind(item) : void 0,
+      canUse: this.canUse != null ? this.canUse.bind(item) : void 0,
+      tick: this.tick != null ? this.tick.bind(item) : void 0,
+      complete: this.complete != null ? this.complete.bind(item) : void 0
+    };
+  };
 
   return Training;
 
-})(), classes.Contract = (function() {
-  function Contract() {}
+})(Base), classes.Contract = (function(superClass) {
+  var item;
+
+  extend(Contract, superClass);
+
+  function Contract(name1, size1, description, id1) {
+    this.name = name1;
+    this.size = size1;
+    this.description = description;
+    this.id = id1;
+    Contract.__super__.constructor.apply(this, arguments);
+    if (this.tF == null) {
+      this.tF = 0;
+    }
+    if (this.dF == null) {
+      this.dF = 0;
+    }
+  }
+
+  Contract.prototype.convert = item = {
+    name: Contract.name,
+    id: Contract.id,
+    size: Contract.size,
+    description: Contract.description,
+    tF: Contract.tF,
+    dF: Contract.dF,
+    card: Contract.card,
+    generateCard: Contract.generateCard != null ? Contract.generateCard.bind(item) : void 0,
+    rF: Contract.rF
+  };
 
   return Contract;
 
-})(), classes.Publisher = (function() {
-  function Publisher() {}
+})(Base), classes.Publisher = (function(superClass) {
+  extend(Publisher, superClass);
+
+  function Publisher(name1, id1) {
+    this.name = name1;
+    this.id = id1;
+    Publisher.__super__.constructor.apply(this, arguments);
+  }
+
+  Publisher.prototype.convert = function() {
+    var item;
+    return item = {
+      name: this.name,
+      id: this.id,
+      card: this.card,
+      generateCard: this.generateCard != null ? this.generateCard.bind(item) : void 0
+    };
+  };
 
   return Publisher;
 
-})())();
+})(Base), classes.Event = (function(superClass) {
+  extend(Event, superClass);
 
-SDP.GDT.addEvent = function(item) {
-  if (item.getEvent != null) {
-    item = item.getEvent();
+  function Event(id1, isRandomEvent) {
+    this.id = id1;
+    this.isRandomEvent = isRandomEvent;
+    Event.__super__.constructor.apply(this, arguments);
+    if (this.trigger == null) {
+      this.trigger = function(company) {
+        return false;
+      };
+    }
   }
-  if (item.event != null) {
-    item = item.event;
-  }
-  return GDT.addEvent(item);
-};
+
+  Event.prototype.convert = function() {
+    var item;
+    return item = {
+      id: this.id,
+      isRandomEvent: this.isRandomEvent,
+      notification: this.notification,
+      trigger: this.tigger.bind(item),
+      getNotification: this.getNotification != null ? this.getNotification.bind(item) : void 0,
+      complete: this.complete != null ? this.complete.bind(item) : void 0
+    };
+  };
+
+  return Event;
+
+})(Base))();
 
 SDP.GDT = (function() {
   var GDT, oldResearchGetAll;
@@ -1889,7 +2032,6 @@ SDP.GDT = (function() {
       return GDT.Company.companes[uid];
     }
   };
-  GDT.Company.addCompany(GameManager.company);
   Platforms.getPlatforms = GDT.Company.getPlatformsFor;
   oldResearchGetAll = Research.getAllItems;
   GDT.Research = {
@@ -2115,7 +2257,7 @@ SDP.GDT = (function() {
       ref = GDT.Training.getAll();
       for (k = 0, len = ref.length; k < len; k++) {
         t = ref[k];
-        if ((t.canSee && t.can(staff, staff.company) || (t.canUse == null)) || (!t.canSee && t.canUse(staff, staff.company))) {
+        if ((t.canSee && t.canSee(staff, staff.company) || (t.canUse == null)) || (!t.canSee && t.canUse(staff, staff.company))) {
           results.push(t);
         }
       }
@@ -3197,9 +3339,91 @@ SDP.GDT = (function() {
       };
     });
   })();
-  GDT.Notification = {
-    queue: []
+  GDT.Event = {
+    events: DecisionNotifications.getAllNotificationsObjects(),
+    getAll: function() {
+      return GDT.Event.slice();
+    },
+    getAvailable: function(company) {
+      var events;
+      return events = GDT.Event.getAll().filter(function(e) {
+        return !e.isRandom && GDT.Event.isAvailable(e);
+      });
+    },
+    getRandom: function(company) {
+      var candidates, event, spawnEvent;
+      spawnEvent = company.flags.nextRandomEvent && company.flags.nextRandomEvent <= GameManager.gameTime;
+      if (!company.flags.nextRandomEvent) {
+        company.flags.nextRandomEvent = (48 + 24 * company.getRandom()) * GameManager.SECONDS_PER_WEEK * 1e3;
+      }
+      if (spawnEvent) {
+        company.flags.nextRandomEvent = GameManager.gameTime + (36 + 48 * company.getRandom()) * GameManager.SECONDS_PER_WEEK * 1e3;
+        candidates = GDT.Event.getAll().filter(function(e) {
+          return e.isRandomEvent && (company.flags.lastRandomEventId !== e.id && GDT.Event.isAvailable(company, e));
+        });
+        event = candidates.pickRandom();
+        if (!event) {
+          return [];
+        }
+        company.flags.lastRandomEventId = event.id;
+        return event;
+      }
+      return [];
+    },
+    trigger: function(company, event) {
+      if (!company.eventTriggerCounts[event.id]) {
+        company.eventTriggerCounts[event.id] = 1;
+      } else {
+        company.eventTriggerCounts[event.id]++;
+      }
+      if (event.notification) {
+        return event.notification;
+      } else {
+        return event.getNotification(company);
+      }
+    },
+    isAvailable: function(company, event) {
+      var count;
+      if (event.date) {
+        if (Math.floor(company.currentWeek) < General.getWeekFromDateString(event.date, event.ignoreGameLengthModifier)) {
+          return false;
+        }
+      }
+      if (event.maxTriggers || event.date) {
+        count = GameManager.company.eventTriggerCounts[event.id];
+        if (count && count >= (event.date ? 1 : event.maxTriggers)) {
+          return false;
+        }
+      }
+      return event.date || event.trigger && event.trigger(company);
+    },
+    getById: function(id) {
+      return GDT.Event.getAll().first(function(e) {
+        return e.id === id;
+      });
+    }
   };
+  GDT.Notification = {
+    queue: [],
+    getNotification: function(company, event) {
+      if (event.notification) {
+        return event.notification;
+      } else {
+        return event.getNotification(company);
+      }
+    },
+    getNewNotifications: function(company) {
+      var results;
+      results = GDT.Event.getAvailable(company).map(function(e) {
+        return GDT.Event.trigger(company, e);
+      });
+      if (results.length === 0) {
+        results = [GDT.Event.trigger(company, GDT.Event.getRandom(company))];
+      }
+      return results;
+    }
+  };
+  DecisionNotifications.getNewNotifications = GDT.Notification.getNewNotifications;
   GDT.ModSupport = (function() {
     var ModSupport, oldLoad;
     ModSupport = {};
@@ -3347,8 +3571,8 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 
 (function() {
   var Game, oldGame, oldGameConst;
-  oldGame = Game.prototype;
   oldGameConst = Game;
+  oldGame = oldGameConst.prototype;
   Game = function(company) {
     oldGameConst.call(this, company);
     this.company = company;
@@ -3358,17 +3582,32 @@ Modifies GDT classes to make all objects indepedent of GameManager.company
 
 (function() {
   var Character, oldChar, oldCharConst, oldSave;
-  oldChar = Character.prototype;
   oldCharConst = Character;
-  Character = function(options) {
-    oldCharConst.call(this, options);
-    this.company = options.company || SDP.GDT.Company.getAllCompanies()[options.uid] || SDP.GDT.Company.getClientCompany();
+  oldChar = oldCharConst.prototype;
+  Character = function() {
+    var args;
+    args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+    oldCharConst.call(this, args);
+    this.company = args[0].company || SDP.GDT.Company.getAllCompanies()[args[0].uid] || SDP.GDT.Company.getClientCompany();
   };
   Character.prototype = oldChar;
   oldSave = Character.prototype.save;
   return Character.prototype.save = function() {
     return oldSave.call(this).companyId = this.company.uid;
   };
+})();
+
+(function() {
+  var Company, oldCompany, oldCompanyConst;
+  oldCompanyConst = Company;
+  oldCompany = oldCompanyConst.prototype;
+  Company = function() {
+    var args;
+    args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+    oldCompanyConst.call(this, args);
+    SDP.GDT.Company.addCompany(this);
+  };
+  return Company.prototype = oldCompany;
 })();
 
 
