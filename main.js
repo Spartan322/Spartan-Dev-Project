@@ -104,6 +104,8 @@ All types can either contain the name of the types as found here or the vanilla 
 		@fparam [MersenneTwister] random The random object used for generating the contract
 		@freturn [ContractCardItem] The card item representing the contract generated
 	@attribute [ContractCardItem] card The card item to repsent the contract definitely (generateCard takes priority)
+	@attribute [Function(CompanyItem)] complete A function to perform on completion
+		@fparam [CompanyItem] company The company responsible for completing the contract
 @note generateCard and card can be ignored if tF and dF are supplied and vice versa
 @optional
 	@attribute [Float] rF The research factor generated
@@ -265,29 +267,118 @@ SDP.Util = (function() {
     }
     return res;
   };
+  util.GLOBAL = (Function("return this"))();
+  util.kindOf = function(obj) {
+    return Object.prototype.toString.call(obj).slice(8, -1);
+  };
+  util.hasOwn = function(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  };
+  util.isKind = function(obj, kind) {
+    return util.kindOf(obj) === kind;
+  };
+  util.isUndefined = function(obj) {
+    return obj === void 0;
+  };
+  util.isNull = function(obj) {
+    return obj === null;
+  };
   util.isString = function(obj) {
-    return obj.constructor === String;
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === String;
   };
   util.isArray = function(obj) {
-    return obj.constructor === Array;
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === Array;
   };
   util.isNumber = function(obj) {
-    return !isNaN(obj);
+    if (obj === void 0 || obj === null || obj !== obj) {
+      return false;
+    }
+    return obj.constructor === Number;
   };
   util.isInteger = function(obj) {
-    return util.isNumber(obj) && Number.isInteger(obj);
+    return util.isNumber(obj) && (obj % 1 === 0);
   };
   util.isFloat = function(obj) {
-    return util.isNumber(obj) && !Number.isInteger(obj);
+    return util.isNumber(obj) && (obj % 1 !== 0);
   };
   util.isObject = function(obj) {
-    return obj.constructor === Object;
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === Object;
   };
   util.isBoolean = function(obj) {
     return obj === true || obj === false;
   };
   util.isFunction = function(obj) {
-    return obj.constructor === Function;
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === Function;
+  };
+  util.isDate = function(obj) {
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === Date;
+  };
+  util.isRegExp = function(obj) {
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === RegExp;
+  };
+  util.isPlainObject = function(obj) {
+    return !!value && typeof value === 'object' && value.constructor === Object;
+  };
+  util.isArguments = function(obj) {
+    return !(util.isUndefined(obj) || util.isNull(obj)) && obj.constructor === Arguments;
+  };
+  util.isEmpty = function(obj) {
+    var key;
+    if (util.isNull(obj)) {
+      return true;
+    } else if (util.isString(obj) || util.isArray(obj)) {
+      return !obj.length;
+    }
+    for (key in obj) {
+      if (util.hasOwn(obj, key)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  util.isFinite = function(obj) {
+    return util.isNumber(obj) && obj !== 2e308 && obj !== -2e308;
+  };
+  util.isNaN = function(obj) {
+    return obj !== obj || !util.isNumber(obj);
+  };
+  util.toArray = function(obj) {
+    var n, result;
+    if (!obj) {
+      return [];
+    }
+    if (obj.length === null || util.isString(obj) || util.isFunction(obj) || util.isRegExp(obj) || obj === util.GLOBAL) {
+      return [obj];
+    } else {
+      n = obj.length;
+      result = [];
+      while (--n) {
+        result[n] = obj[n];
+      }
+      return result;
+    }
+  };
+  util.toNumber = function(obj) {
+    if (util.isNumber(obj)) {
+      return obj;
+    }
+    if (!obj) {
+      return 0;
+    }
+    if (util.isString(obj)) {
+      return parseFloat(obj);
+    }
+    if (util.isArray(obj) || util.isNaN(obj)) {
+      return 0/0;
+    }
+    return Number(obj);
+  };
+  util.toString = function(obj) {
+    if (obj === null) {
+      return '';
+    } else {
+      return obj.toString();
+    }
   };
   String.prototype.capitalize = function(index) {
     var halfResult;
@@ -2413,7 +2504,7 @@ SDP.GDT = (function() {
 			dF: 1,
 			rF: 1.5
 		}];
-    var generateConvertContracts;
+    var generateConvertContracts, oldContractsComplete;
     GDT.Contract = {
       contracts: [],
       getAll: function() {
@@ -2460,7 +2551,7 @@ SDP.GDT = (function() {
         return settings.seed;
       },
       createFromTemplate: function(company, template, random) {
-        var d, dF, item, minPoints, pay, penalty, pointPart, points, r, t, tF, weeks;
+        var contractObject, d, dF, item, minPoints, pay, penalty, pointPart, points, r, t, tF, weeks;
         item = template.generateCard != null ? template.generateCard(company, random) : template.card;
         r = random.random();
         if (random.random > 0.8) {
@@ -2530,7 +2621,7 @@ SDP.GDT = (function() {
             penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random()) / 1e3) * 1e3;
           }
         }
-        return {
+        return contractObject = {
           name: template.name,
           description: template.description,
           id: 'genericContracts',
@@ -2543,7 +2634,8 @@ SDP.GDT = (function() {
           weeksToFinish: weeks,
           rF: template.rF,
           isGeneric: true,
-          size: template.size
+          size: template.size,
+          complete: template.complete != null ? template.complete.bind(contractObject) : void 0
         };
       },
       generate: function(company, size, max) {
@@ -2604,7 +2696,14 @@ SDP.GDT = (function() {
     GDT.Contract.contracts.addRange(smallContracts);
     GDT.Contract.contracts.addRange(mediumContracts);
     GDT.Contract.contracts.addRange(largeContracts);
-    return ProjectContracts.generateContracts.getContract = GDT.Contract.getList;
+    ProjectContracts.generateContracts.getContract = GDT.Contract.getList;
+    oldContractsComplete = ProjectContracts.genericContracts.complete;
+    return ProjectContracts.genericContracts.complete = function(company, success, data) {
+      if (typeof contract.complete === "function") {
+        contract.complete();
+      }
+      return oldContractsComplete(company, success, data);
+    };
   })();
   (function() {
     var publishers = [{
@@ -2641,7 +2740,8 @@ SDP.GDT = (function() {
 			id: "\u00dcberSoft",
 			name: "\u00dcberSoft"
 		}];
-    return GDT.Publisher = {
+    var oldPublisherComplete;
+    GDT.Publisher = {
       publishers: publishers.slice(),
       getAll: function() {
         return GDT.Publisher.publishers.slice();
@@ -2659,8 +2759,8 @@ SDP.GDT = (function() {
         return results;
       },
       generate: function(company, max) {
-        var allPlatforms, audience, audiences, basePay, count, diffculty, excludes, genre, i, item, k, lastGame, minScore, name, name1, pay, penalty, platform, platforms, puName, pubName, pubObject, publisher, random, ref, researchedTopics, results, royaltyRate, seed, settings, size, sizeBasePay, sizes, topic, topics;
-        settings = GDT.Contract.getSettings(company, size);
+        var allPlatforms, audience, audiences, basePay, contract, count, diffculty, excludes, genre, i, item, k, lastGame, minScore, name, name1, pay, penalty, platform, platforms, puName, pubName, pubObject, publisher, random, ref, researchedTopics, results, royaltyRate, seed, settings, size, sizeBasePay, sizes, topic, topics;
+        settings = GDT.Contract.getSettings(company, 'publisher');
         seed = GDT.Contract.getSeed(settings);
         random = new MersenneTwister(seed);
         count = Math.max(max - 1, Math.floor(random.random() * max));
@@ -2736,7 +2836,7 @@ SDP.GDT = (function() {
               genre = item.genre;
               platform = item.platform;
               name = (topic ? topic.name : 'Any Topic'.localize()) + " / " + (genre ? genre.name : 'Any Genre'.localize());
-              results.push({
+              results.push(contract = {
                 id: 'publisherContracts',
                 refNumber: Math.floor(Math.random() * 65535),
                 type: 'gameContract',
@@ -2752,7 +2852,8 @@ SDP.GDT = (function() {
                 minScore: item.minScore,
                 payment: item.pay,
                 penalty: item.penalty,
-                royaltyRate: item.royaltyRate
+                royaltyRate: item.royaltyRate,
+                complete: item.complete != null ? item.complete.bind(contract) : publisher.complete ? publisher.complete.bind(contract) : void 0
               });
               continue;
             }
@@ -2815,7 +2916,7 @@ SDP.GDT = (function() {
           if (!platform || Platforms.getPlatformsOnMarket(company).first(function(p) {
             return p.id === platform.id;
           })) {
-            results.push({
+            results.push(contract = {
               id: "publisherContracts",
               refNumber: Math.floor(Math.random() * 65535),
               type: "gameContract",
@@ -2831,7 +2932,8 @@ SDP.GDT = (function() {
               minScore: minScore,
               payment: pay,
               penalty: penalty,
-              royaltyRate: royaltyRate
+              royaltyRate: royaltyRate,
+              complete: pubObject.complete != null ? pubObject.complete.bind(contract) : void 0
             });
           } else {
             count++;
@@ -2844,6 +2946,18 @@ SDP.GDT = (function() {
           return p.id === id;
         });
       }
+    };
+    ProjectContracts.publisherContracts.getContract = function(company) {
+      return GDT.Publisher.generate(company, 5).filter(function(p) {
+        return !p.skip;
+      });
+    };
+    oldPublisherComplete = ProjectContracts.publisherContracts.complete;
+    return ProjectContracts.publisherContracts.complete = function(company, success, data) {
+      if (typeof data.complete === "function") {
+        data.complete(company, success, data);
+      }
+      return oldPublisherComplete(company, success, data);
     };
   })();
   (function() {
@@ -3478,6 +3592,36 @@ SDP.GDT = (function() {
   SDP.ULWrapper.Contracts = (function() {
     var Contracts;
     Contracts = {};
+    Contracts.add = function(c) {
+      var isAvailable;
+      isAvailable = function(isRand, chance) {
+        if (isRand === true) {
+          if ((1 === Math.floor((Math.random() * chance) + 1)) === false) {
+            isRand = false;
+          }
+        }
+        if (isRand === false) {
+          isRand = true;
+        }
+        return isRand;
+      };
+      c.isAvailable = function(company) {
+        return c.canTrigger(company) && isAvailable(c.isRandom, c.randomChance);
+      };
+      c.card = {
+        techPoints: c.requiredT,
+        designPoints: c.requiredD,
+        payment: c.payment,
+        penalty: c.penalty,
+        weeks: c.weeksToFinish
+      };
+      return SDP.Functional.addContractItem(c);
+    };
+    Contracts.collection = function(company) {
+      return SDP.GDT.Contract.getAvailable(company).filter(function(c) {
+        return c.size === 'small' || (company.flags.mediumContractsEnabled && c.size === 'medium') || (company.flags.largeContractsEnabled && c.size === 'large');
+      });
+    };
     return Contracts;
   })();
   SDP.ULWrapper.Publishers = (function() {

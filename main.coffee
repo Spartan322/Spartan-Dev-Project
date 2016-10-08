@@ -102,6 +102,8 @@ All types can either contain the name of the types as found here or the vanilla 
 		@fparam [MersenneTwister] random The random object used for generating the contract
 		@freturn [ContractCardItem] The card item representing the contract generated
 	@attribute [ContractCardItem] card The card item to repsent the contract definitely (generateCard takes priority)
+	@attribute [Function(CompanyItem)] complete A function to perform on completion
+		@fparam [CompanyItem] company The company responsible for completing the contract
 @note generateCard and card can be ignored if tF and dF are supplied and vice versa
 @optional
 	@attribute [Float] rF The research factor generated
@@ -228,14 +230,54 @@ SDP.Util = ( ->
 			else if code is 46 and dots isnt -1 then ++dots else dots = -1
 		return res
 
-	util.isString = (obj) -> obj.constructor is String
-	util.isArray = (obj) -> obj.constructor is Array
-	util.isNumber = (obj) -> not isNaN(obj)
-	util.isInteger = (obj) -> util.isNumber(obj) and Number.isInteger(obj)
-	util.isFloat = (obj) -> util.isNumber(obj) and not Number.isInteger(obj)
-	util.isObject = (obj) -> obj.constructor is Object
+	# Define very useful, efficent (as much as possible), basic utility functions
+
+	util.GLOBAL = (Function("return this"))()
+
+	util.kindOf = (obj) -> Object.prototype.toString.call(obj).slice(8, -1)
+	util.hasOwn = (obj, key) -> Object.prototype.hasOwnProperty.call(obj, key)
+	util.isKind = (obj, kind) -> util.kindOf(obj) is kind
+
+	util.isUndefined = (obj) -> obj is undefined
+	util.isNull = (obj) -> obj is null
+	util.isString = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is String
+	util.isArray = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is Array
+	util.isNumber = (obj) ->
+		if obj is undefined or obj is null or obj isnt obj then return false
+		return obj.constructor is Number
+	util.isInteger = (obj) -> util.isNumber(obj) and (obj % 1 is 0)
+	util.isFloat = (obj) -> util.isNumber(obj) and (obj % 1 isnt 0)
+	util.isObject = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is Object
 	util.isBoolean = (obj) -> obj is true or obj is false
-	util.isFunction = (obj) -> obj.constructor is Function
+	util.isFunction = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is Function
+	util.isDate = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is Date
+	util.isRegExp = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is RegExp
+	util.isPlainObject = (obj) -> not not value and typeof value is 'object' and value.constructor is Object
+	util.isArguments = (obj) -> not (util.isUndefined(obj) or util.isNull(obj)) and obj.constructor is Arguments
+	util.isEmpty = (obj) ->
+		if util.isNull(obj) then return true
+		else if util.isString(obj) or util.isArray(obj) then return not obj.length
+		return false for key of obj when util.hasOwn(obj, key)
+		return true
+	util.isFinite = (obj) -> util.isNumber(obj) and obj isnt Infinity and obj isnt -Infinity
+	util.isNaN = (obj) -> obj isnt obj or not util.isNumber(obj)
+
+	util.toArray = (obj) ->
+		if not obj then return []
+		if obj.length is null or util.isString(obj) or util.isFunction(obj) or util.isRegExp(obj) or obj is util.GLOBAL then return [obj]
+		else
+			n = obj.length
+			result = []
+			result[n] = obj[n] while(--n)
+			return result
+	util.toNumber = (obj) ->
+		if util.isNumber(obj) then return obj
+		if not obj then return 0
+		if util.isString(obj) then return parseFloat(obj)
+		if util.isArray(obj) or util.isNaN(obj) then return NaN
+		Number(obj)
+	util.toString = (obj) ->
+		return if obj is null then '' else obj.toString()
 
 	String::capitalize = (index = 0) ->
 		halfResult = @charAt(index).toUpperCase() + @slice(index+1)
@@ -1650,7 +1692,7 @@ SDP.GDT = ( ->
 					unless pay then pay = Math.floor(points*1e3/1e3) * 1e3
 					unless weeks then (weeks = if template.size is small then Math.floor(3 + 3 * random.random()) else Math.floor(3 + 7 * random.random()))
 					unless penalty then penalty = Math.floor((pay * 0.2 + pay * 0.3 * random.random())/1e3) * 1e3
-				{
+				contractObject = {
 					name: template.name
 					description: template.description
 					id: 'genericContracts'
@@ -1664,6 +1706,7 @@ SDP.GDT = ( ->
 					rF: template.rF
 					isGeneric: true
 					size: template.size
+					complete: if template.complete? then template.complete.bind(contractObject) else undefined
 				}
 			generate: (company, size, max) ->
 				settings = GDT.Contract.getSettings(company, size)
@@ -1702,6 +1745,10 @@ SDP.GDT = ( ->
 		GDT.Contract.contracts.addRange(mediumContracts)
 		GDT.Contract.contracts.addRange(largeContracts)
 		ProjectContracts.generateContracts.getContract = GDT.Contract.getList
+		oldContractsComplete = ProjectContracts.genericContracts.complete
+		ProjectContracts.genericContracts.complete = (company, success, data) ->
+			contract.complete?()
+			oldContractsComplete(company, success, data)
 	)()
 
 
@@ -1749,7 +1796,7 @@ SDP.GDT = ( ->
 					results.push(p)
 				results
 			generate: (company, max) ->
-				settings = GDT.Contract.getSettings(company, size)
+				settings = GDT.Contract.getSettings(company, 'publisher')
 				seed = GDT.Contract.getSeed(settings)
 				random = new MersenneTwister(seed)
 				count = Math.max(max - 1, Math.floor(random.random() * max))
@@ -1816,7 +1863,7 @@ SDP.GDT = ( ->
 							genre = item.genre
 							platform = item.platform
 							name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
-							results.push {
+							results.push contract = {
 								id: 'publisherContracts'
 								refNumber: Math.floor(Math.random() * 65535)
 								type: 'gameContract'
@@ -1833,6 +1880,7 @@ SDP.GDT = ( ->
 								payment: item.pay,
 								penalty: item.penalty,
 								royaltyRate: item.royaltyRate
+								complete: if item.complete? then item.complete.bind(contract) else if publisher.complete then publisher.complete.bind(contract) else undefined
 							}
 							continue
 					diffculty = 0
@@ -1879,7 +1927,7 @@ SDP.GDT = ( ->
 					royaltyRate = Math.floor(7 + 8 * difficulty) / 100
 					name = "#{if topic then topic.name else 'Any Topic'.localize()} / #{if genre then genre.name else 'Any Genre'.localize()}"
 					if not platform or Platforms.getPlatformsOnMarket(company).first((p) -> p.id is platform.id)
-						results.push {
+						results.push contract = {
 							id: "publisherContracts"
 							refNumber: Math.floor(Math.random() * 65535)
 							type: "gameContract"
@@ -1896,12 +1944,19 @@ SDP.GDT = ( ->
 							payment: pay
 							penalty: penalty
 							royaltyRate: royaltyRate
+							complete: if pubObject.complete? then pubObject.complete.bind(contract) else undefined
 						}
 					else
 						count++
 				results
 			getById: (id) -> GDT.Publisher.getAll().first((p) -> p.id is id)
 		}
+		ProjectContracts.publisherContracts.getContract = (company) ->
+			GDT.Publisher.generate(company, 5).filter((p) -> not p.skip )
+		oldPublisherComplete = ProjectContracts.publisherContracts.complete
+		ProjectContracts.publisherContracts.complete = (company, success, data) ->
+			data.complete?(company, success, data)
+			oldPublisherComplete(company, success, data)
 	)()
 
 	( ->
@@ -2298,7 +2353,26 @@ SDP.GDT = ( ->
 
 	SDP.ULWrapper.Contracts = ( ->
 		Contracts = {}
-		# add Contract modifications here
+		Contracts.add = (c) ->
+			isAvailable = (isRand, chance) ->
+				if isRand is true
+					if (1 is Math.floor((Math.random() * chance) + 1)) is false then isRand = false
+				if isRand is false then isRand = true
+				return isRand
+			c.isAvailable = (company) ->
+				c.canTrigger(company) and isAvailable(c.isRandom, c.randomChance)
+			c.card = {
+					techPoints: c.requiredT
+					designPoints: c.requiredD
+					payment: c.payment
+					penalty: c.penalty
+					weeks: c.weeksToFinish
+				}
+			SDP.Functional.addContractItem(c)
+		Contracts.collection = (company) ->
+			SDP.GDT.Contract.getAvailable(company).filter((c) ->
+				c.size is 'small' or (company.flags.mediumContractsEnabled and c.size is 'medium') or (company.flags.largeContractsEnabled and c.size is 'large')
+			)
 		Contracts
 	)()
 
